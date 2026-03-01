@@ -240,7 +240,7 @@ export default function ActiveVisitPage() {
 
   if (loading && !visit) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1d1d1f] border-t-transparent" />
       </div>
     );
@@ -248,7 +248,7 @@ export default function ActiveVisitPage() {
 
   if (error && !visit) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] flex-col items-center justify-center gap-4 p-6 pt-12">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
         <p className="text-[15px] text-[#ff3b30]">{error}</p>
         <button
           onClick={() => router.push("/calendar")}
@@ -263,7 +263,7 @@ export default function ActiveVisitPage() {
   // ── Main render ────────────────────────────────────────
 
   return (
-    <div className="mx-auto max-w-lg px-5 pb-32 pt-20">
+    <div className="mx-auto max-w-lg px-5 pb-32 pt-8">
       {/* Error toast */}
       {error && (
         <div className="mb-6 rounded-xl bg-[#ff3b30]/10 px-4 py-3 text-[13px] text-[#ff3b30]">

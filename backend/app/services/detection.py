@@ -142,24 +142,40 @@ class ShelfDetector:
     async def _detect_via_api(
         self, image_bytes: bytes, width: int, height: int
     ) -> list[Detection]:
-        """Call Roboflow Serverless API (Grounding DINO) via HTTP POST."""
+        """Call Roboflow Serverless API via HTTP POST.
+
+        Supports two model types controlled by the URL in settings:
+        - Fine-tuned model (e.g. product-kc4tx/2): sends raw base64, no prompt.
+        - Grounding DINO (zero-shot): sends JSON with text prompt.
+        """
         if not self.api_key:
             raise DetectionError(
                 "ROBOFLOW_API_KEY not configured (roboflow_api_key is empty)"
             )
 
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
+        url = f"{self.api_url}?api_key={self.api_key}"
 
-        # Convert dot-separated prompt to list: "product . bottle" → ["product", "bottle"]
-        text_classes = [t.strip() for t in self.text_prompt.split(".") if t.strip()]
+        is_grounding_dino = "grounding_dino" in self.api_url
 
-        payload = {
-            "api_key": self.api_key,
-            "image": {"type": "base64", "value": b64_image},
-            "text": text_classes,
-            "box_threshold": self.confidence_threshold,
-            "text_threshold": self.confidence_threshold,
-        }
+        if is_grounding_dino:
+            text_classes = [t.strip() for t in self.text_prompt.split(".") if t.strip()]
+            _API_THRESHOLD = 0.01
+            request_kwargs = {
+                "json": {
+                    "image": {"type": "base64", "value": b64_image},
+                    "text": text_classes,
+                    "box_threshold": _API_THRESHOLD,
+                    "text_threshold": _API_THRESHOLD,
+                },
+            }
+        else:
+            # Fine-tuned model: raw base64 string as body
+            url += f"&confidence={self.confidence_threshold}"
+            request_kwargs = {
+                "data": b64_image,
+                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+            }
 
         last_error: Exception | None = None
 
@@ -167,24 +183,26 @@ class ShelfDetector:
             for attempt in range(1 + len(_RETRY_DELAYS)):
                 try:
                     async with session.post(
-                        self.api_url,
-                        json=payload,
+                        url,
                         timeout=aiohttp.ClientTimeout(total=120),
+                        **request_kwargs,
                     ) as resp:
-                        if resp.status == 503:
+                        if resp.status in (500, 503):
                             if attempt < len(_RETRY_DELAYS):
                                 delay = _RETRY_DELAYS[attempt]
                                 logger.warning(
-                                    "Roboflow API 503, retry %d/%d in %ds",
+                                    "Roboflow API %d, retry %d/%d in %ds",
+                                    resp.status,
                                     attempt + 1,
                                     len(_RETRY_DELAYS),
                                     delay,
                                 )
                                 await asyncio.sleep(delay)
                                 continue
+                            body = await resp.text()
                             raise DetectionError(
-                                f"Roboflow API returned 503 after "
-                                f"{len(_RETRY_DELAYS)} retries"
+                                f"Roboflow API returned {resp.status} after "
+                                f"{len(_RETRY_DELAYS)} retries: {body[:300]}"
                             )
 
                         if resp.status != 200:
@@ -255,11 +273,14 @@ class ShelfDetector:
                 x_max = (cx + w / 2) / img_w
                 y_max = (cy + h / 2) / img_h
 
+                raw_label = str(item.get("class", "product"))
+                label = "product" if raw_label in ("0", "") else raw_label
+
                 detections.append(
                     Detection(
                         bbox=(x_min, y_min, x_max, y_max),
                         score=float(item["confidence"]),
-                        label=item.get("class", "product"),
+                        label=label,
                     )
                 )
             except (KeyError, TypeError, ValueError) as exc:

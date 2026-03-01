@@ -26,14 +26,14 @@ export default function SettingsAccountPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-xl px-6 pt-24 pb-20">
+    <div className="mx-auto max-w-xl px-6 pt-8 pb-20">
       <div className="animate-fade-in">
         <h1 className="text-[28px] font-semibold tracking-tight text-[#1d1d1f]">
           Cuenta

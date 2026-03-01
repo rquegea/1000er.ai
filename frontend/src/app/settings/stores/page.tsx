@@ -191,14 +191,14 @@ export default function SettingsStoresPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pt-24 pb-20">
+    <div className="mx-auto max-w-5xl px-6 pt-8 pb-20">
       <div className="animate-fade-in flex items-center justify-between">
         <div>
           <h1 className="text-[28px] font-semibold tracking-tight text-[#1d1d1f]">

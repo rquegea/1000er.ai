@@ -126,7 +126,7 @@ export default function AnalyticsPage() {
   const activeStores = filteredStores.length;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pt-24 pb-20">
+    <div className="mx-auto max-w-5xl px-6 pt-8 pb-20">
       {/* Header */}
       <div className="animate-fade-in">
         <p className="text-[11px] font-medium uppercase tracking-widest text-[#86868b]">

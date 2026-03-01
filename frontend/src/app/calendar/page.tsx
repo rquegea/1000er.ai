@@ -180,14 +180,14 @@ export default function CalendarPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pb-20 pt-24">
+    <div className="mx-auto max-w-5xl px-6 pb-20 pt-8">
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

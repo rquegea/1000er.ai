@@ -139,7 +139,7 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
@@ -149,7 +149,7 @@ export default function HomePage() {
     user?.first_name || user?.email?.split("@")[0] || "usuario";
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pb-20 pt-24">
+    <div className="mx-auto max-w-5xl px-6 pb-20 pt-8">
       {/* ── Greeting ─────────────────────────────────── */}
       <div className="mb-10">
         <h1 className="text-[28px] font-semibold tracking-tight text-[#1d1d1f]">

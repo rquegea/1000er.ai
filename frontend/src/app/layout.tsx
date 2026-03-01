@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 
 const inter = Inter({
@@ -29,8 +29,8 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${inter.variable} ${geistMono.variable}`}>
         <AuthProvider>
-          <Navbar />
-          <main>{children}</main>
+          <Sidebar />
+          <main className="md:ml-[240px]">{children}</main>
         </AuthProvider>
       </body>
     </html>

@@ -26,7 +26,7 @@ export default function AnalysisDetailPage({
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+      <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
@@ -34,7 +34,7 @@ export default function AnalysisDetailPage({
 
   if (error || !analysis) {
     return (
-      <div className="flex min-h-[calc(100vh-48px)] flex-col items-center justify-center gap-4 pt-12">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-[15px] text-[#86868b]">
           {error || "Análisis no encontrado"}
         </p>
@@ -52,7 +52,7 @@ export default function AnalysisDetailPage({
   const products = analysis.products || [];
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pt-24 pb-20">
+    <div className="mx-auto max-w-5xl px-6 pt-8 pb-20">
       {/* Header */}
       <div className="animate-fade-in flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div>

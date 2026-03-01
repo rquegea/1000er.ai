@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # --- Vision V2 Pipeline ---
     vision_pipeline: str = "v2"
     roboflow_api_key: str = ""
-    roboflow_model_url: str = "https://infer.roboflow.com/grounding_dino/infer"
+    roboflow_model_url: str = "https://serverless.roboflow.com/product-kc4tx/2"
     detection_text_prompt: str = "product . bottle . box . can . package . bag . carton . food"
     detection_confidence_threshold: float = 0.15
     detection_nms_iou_threshold: float = 0.45
