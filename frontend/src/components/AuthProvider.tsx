@@ -38,42 +38,51 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
+    // Use onAuthStateChange as the single source of truth.
+    // It fires INITIAL_SESSION first, then SIGNED_IN / SIGNED_OUT.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setLoading(false);
+
+      // Only redirect on explicit user-initiated sign-out,
+      // never on INITIAL_SESSION with null session.
+      if (event === "SIGNED_OUT") {
+        router.replace("/login");
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
 
-  // Redirect to login if not authenticated
+  // Redirect to login if initial load resolves with no session
   useEffect(() => {
     if (loading) return;
+    if (session) return;
     const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
-    if (!session && !isPublic) {
+    if (!isPublic) {
       router.replace("/login");
     }
   }, [session, loading, pathname, router]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    router.replace("/login");
   };
+
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   return (
     <AuthContext.Provider
       value={{ session, user: session?.user ?? null, loading, signOut }}
     >
-      {children}
+      {loading && !isPublic ? (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-[1.5px] border-[#e5e5ea] border-t-[#1d1d1f]" />
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }
