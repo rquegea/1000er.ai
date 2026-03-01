@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.config import settings
-from app.deps import get_supabase_client
+from app.deps import get_supabase_client, get_current_user, CurrentUser
 from app.models.api import VisitOut, VisitListOut
 
 router = APIRouter(prefix="/api/v1/visits", tags=["visits"])
@@ -14,14 +13,12 @@ router = APIRouter(prefix="/api/v1/visits", tags=["visits"])
 
 class VisitCreate(BaseModel):
     store_id: str
-    user_id: str
     scheduled_at: str | None = None
     notes: str | None = None
 
 
 class VisitUpdate(BaseModel):
     store_id: str | None = None
-    user_id: str | None = None
     scheduled_at: str | None = None
     notes: str | None = None
     status: str | None = None
@@ -50,14 +47,13 @@ def _row_to_out(row: dict) -> VisitOut:
 
 
 @router.post("/", response_model=VisitOut, status_code=201)
-async def create_visit(body: VisitCreate):
-    tenant_id = settings.mvp_tenant_id
+async def create_visit(body: VisitCreate, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
     payload = {
-        "tenant_id": tenant_id,
+        "tenant_id": user.tenant_id,
         "store_id": body.store_id,
-        "user_id": body.user_id,
+        "user_id": user.user_id,
         "status": "scheduled",
     }
     if body.scheduled_at:
@@ -73,14 +69,14 @@ async def create_visit(body: VisitCreate):
 async def list_visits(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    tenant_id = settings.mvp_tenant_id
     sb = get_supabase_client()
 
     rows = (
         sb.table("visits")
         .select("*", count="exact")
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .order("created_at", desc=True)
         .range(offset, offset + limit - 1)
         .execute()
@@ -97,15 +93,14 @@ async def list_visits(
 
 
 @router.get("/{visit_id}", response_model=VisitOut)
-async def get_visit(visit_id: str):
-    tenant_id = settings.mvp_tenant_id
+async def get_visit(visit_id: str, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
     row = (
         sb.table("visits")
         .select("*")
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -116,8 +111,7 @@ async def get_visit(visit_id: str):
 
 
 @router.put("/{visit_id}", response_model=VisitOut)
-async def update_visit(visit_id: str, body: VisitUpdate):
-    tenant_id = settings.mvp_tenant_id
+async def update_visit(visit_id: str, body: VisitUpdate, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
     updates = body.model_dump(exclude_none=True)
@@ -128,7 +122,7 @@ async def update_visit(visit_id: str, body: VisitUpdate):
         sb.table("visits")
         .update(updates)
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -139,16 +133,14 @@ async def update_visit(visit_id: str, body: VisitUpdate):
 
 
 @router.post("/{visit_id}/start", response_model=VisitOut)
-async def start_visit(visit_id: str):
-    tenant_id = settings.mvp_tenant_id
+async def start_visit(visit_id: str, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
-    # Verify visit exists and is in scheduled status
     existing = (
         sb.table("visits")
         .select("*")
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -167,7 +159,7 @@ async def start_visit(visit_id: str):
         sb.table("visits")
         .update({"status": "in_progress", "started_at": now})
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -175,16 +167,14 @@ async def start_visit(visit_id: str):
 
 
 @router.post("/{visit_id}/end", response_model=VisitOut)
-async def end_visit(visit_id: str):
-    tenant_id = settings.mvp_tenant_id
+async def end_visit(visit_id: str, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
-    # Verify visit exists and is in_progress
     existing = (
         sb.table("visits")
         .select("*")
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -212,7 +202,7 @@ async def end_visit(visit_id: str):
             "duration_minutes": duration,
         })
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -220,15 +210,14 @@ async def end_visit(visit_id: str):
 
 
 @router.delete("/{visit_id}", status_code=204)
-async def delete_visit(visit_id: str):
-    tenant_id = settings.mvp_tenant_id
+async def delete_visit(visit_id: str, user: CurrentUser = Depends(get_current_user)):
     sb = get_supabase_client()
 
     row = (
         sb.table("visits")
         .delete()
         .eq("id", visit_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 

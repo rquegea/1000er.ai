@@ -1,8 +1,8 @@
 import uuid
-from fastapi import APIRouter, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query
 
 from app.config import settings
-from app.deps import get_supabase_client
+from app.deps import get_supabase_client, get_current_user, CurrentUser
 from app.services.vision import analyze_shelf_image_from_bytes
 from app.models.api import (
     AnalysisUploadOut,
@@ -27,17 +27,14 @@ def _ensure_bucket(sb):
 
 
 @router.post("/upload", response_model=AnalysisUploadOut)
-async def upload_and_analyze(file: UploadFile = File(...)):
+async def upload_and_analyze(
+    file: UploadFile = File(...),
+    store_id: str = Form(...),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Upload a shelf image, run AI analysis, and return results."""
-    tenant_id = settings.mvp_tenant_id
-    user_id = settings.mvp_user_id
-    store_id = settings.mvp_store_id
-
-    if not all([tenant_id, user_id, store_id]):
-        raise HTTPException(
-            status_code=500,
-            detail="MVP_TENANT_ID, MVP_USER_ID, and MVP_STORE_ID must be set in .env",
-        )
+    tenant_id = user.tenant_id
+    user_id = user.user_id
 
     sb = get_supabase_client()
     _ensure_bucket(sb)
@@ -167,16 +164,15 @@ async def upload_and_analyze(file: UploadFile = File(...)):
 
 
 @router.get("/{analysis_id}", response_model=AnalysisDetailOut)
-async def get_analysis(analysis_id: str):
+async def get_analysis(analysis_id: str, user: CurrentUser = Depends(get_current_user)):
     """Get a single analysis with all its detected products."""
-    tenant_id = settings.mvp_tenant_id
     sb = get_supabase_client()
 
     row = (
         sb.table("analyses")
         .select("*")
         .eq("id", analysis_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -189,7 +185,7 @@ async def get_analysis(analysis_id: str):
         sb.table("detected_products")
         .select("*")
         .eq("analysis_id", analysis_id)
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .execute()
     )
 
@@ -224,16 +220,15 @@ async def get_analysis(analysis_id: str):
 async def list_analyses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """List analyses for the current tenant with pagination."""
-    tenant_id = settings.mvp_tenant_id
     sb = get_supabase_client()
 
-    # Get paginated results
     rows = (
         sb.table("analyses")
         .select("*", count="exact")
-        .eq("tenant_id", tenant_id)
+        .eq("tenant_id", user.tenant_id)
         .order("created_at", desc=True)
         .range(offset, offset + limit - 1)
         .execute()
