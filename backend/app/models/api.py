@@ -42,6 +42,64 @@ class UserListOut(BaseModel):
     offset: int
 
 
+# ── Stores ─────────────────────────────────────────────────
+
+
+class StoreCreate(BaseModel):
+    name: str
+    address: str | None = None
+    chain: str | None = None
+    responsible_user_id: str | None = None
+    key_account_id: str | None = None
+    phone_section_manager: str | None = None
+    email_section_manager: str | None = None
+    phone_sector_manager: str | None = None
+    email_sector_manager: str | None = None
+    region: str | None = None
+    area: str | None = None
+
+
+class StoreUpdate(BaseModel):
+    name: str | None = None
+    address: str | None = None
+    chain: str | None = None
+    responsible_user_id: str | None = None
+    key_account_id: str | None = None
+    phone_section_manager: str | None = None
+    email_section_manager: str | None = None
+    phone_sector_manager: str | None = None
+    email_sector_manager: str | None = None
+    region: str | None = None
+    area: str | None = None
+
+
+class StoreOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    address: str | None = None
+    chain: str | None = None
+    responsible_user_id: str | None = None
+    key_account_id: str | None = None
+    phone_section_manager: str | None = None
+    email_section_manager: str | None = None
+    phone_sector_manager: str | None = None
+    email_sector_manager: str | None = None
+    region: str | None = None
+    area: str | None = None
+    created_at: str
+
+
+class StoreListOut(BaseModel):
+    data: list[StoreOut]
+    total: int
+    limit: int
+    offset: int
+
+
+# ── Shelf Uploads & Analyses ──────────────────────────────
+
+
 class ShelfUploadOut(BaseModel):
     id: str
     tenant_id: str

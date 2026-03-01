@@ -102,7 +102,52 @@ export interface Visit {
 
 export interface Store {
   id: string;
+  tenant_id: string;
+  name: string;
+  address: string | null;
+  chain: string | null;
+  responsible_user_id: string | null;
+  key_account_id: string | null;
+  phone_section_manager: string | null;
+  email_section_manager: string | null;
+  phone_sector_manager: string | null;
+  email_sector_manager: string | null;
+  region: string | null;
+  area: string | null;
+  created_at: string;
+}
+
+export interface StoreListResponse {
+  data: Store[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface StoreCreatePayload {
   name: string;
   address?: string;
   chain?: string;
+  responsible_user_id?: string;
+  key_account_id?: string;
+  phone_section_manager?: string;
+  email_section_manager?: string;
+  phone_sector_manager?: string;
+  email_sector_manager?: string;
+  region?: string;
+  area?: string;
+}
+
+export interface StoreUpdatePayload {
+  name?: string;
+  address?: string;
+  chain?: string;
+  responsible_user_id?: string;
+  key_account_id?: string;
+  phone_section_manager?: string;
+  email_section_manager?: string;
+  phone_sector_manager?: string;
+  email_sector_manager?: string;
+  region?: string;
+  area?: string;
 }

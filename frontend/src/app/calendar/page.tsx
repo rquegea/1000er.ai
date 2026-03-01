@@ -9,13 +9,13 @@ import { useState } from "react";
 
 /* ── Mock Data ─────────────────────────────────────────── */
 
-const mockStores: Store[] = [
+const mockStores = [
   { id: "1", name: "Mercadona Sanchinarro", chain: "Mercadona", address: "C/ Sanchinarro 12" },
   { id: "2", name: "Carrefour Arturo Soria", chain: "Carrefour", address: "Av. Arturo Soria 56" },
   { id: "3", name: "Mercadona Pintor Gris", chain: "Mercadona", address: "C/ Pintor Gris 8" },
   { id: "4", name: "Lidl Gran Vía", chain: "Lidl", address: "Gran Vía 32" },
   { id: "5", name: "Dia Las Tablas", chain: "Dia", address: "Av. Las Tablas 14" },
-];
+] as Store[];
 
 const initialVisits: Visit[] = [
   { id: "1", storeId: "1", storeName: "Mercadona Sanchinarro", scheduledAt: "2026-03-05T09:00:00", status: "completed", notes: "Revisar lineal de cereales" },

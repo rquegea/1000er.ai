@@ -228,6 +228,7 @@ export default function UsersPage() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <button
+                        type="button"
                         onClick={() => openEdit(u)}
                         className="text-[13px] text-[#0066cc] transition-colors hover:text-[#004499]"
                       >
@@ -235,6 +236,7 @@ export default function UsersPage() {
                       </button>
                       {u.id !== currentUser?.id && (
                         <button
+                          type="button"
                           onClick={() => setDeletingUser(u)}
                           className="text-[13px] text-[#ff3b30] transition-colors hover:text-[#cc0000]"
                         >

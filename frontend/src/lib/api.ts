@@ -6,6 +6,10 @@ import type {
   UserListResponse,
   UserCreatePayload,
   UserUpdatePayload,
+  Store,
+  StoreListResponse,
+  StoreCreatePayload,
+  StoreUpdatePayload,
 } from "@/types";
 import supabase from "@/lib/supabase";
 
@@ -131,6 +135,68 @@ export async function deleteUser(userId: string): Promise<void> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Failed to delete user" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+}
+
+// ── Stores ────────────────────────────────────────────────
+
+export async function listStores(
+  limit = 50,
+  offset = 0
+): Promise<StoreListResponse> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/stores/?limit=${limit}&offset=${offset}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch stores (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function getStore(storeId: string): Promise<Store> {
+  const res = await authFetch(`${API_URL}/api/v1/stores/${storeId}`);
+  if (!res.ok) {
+    throw new Error(`Store not found (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function createStore(payload: StoreCreatePayload): Promise<Store> {
+  const res = await authFetch(`${API_URL}/api/v1/stores/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create store" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateStore(
+  storeId: string,
+  payload: StoreUpdatePayload
+): Promise<Store> {
+  const res = await authFetch(`${API_URL}/api/v1/stores/${storeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update store" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteStore(storeId: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/stores/${storeId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to delete store" }));
     throw new Error(err.detail || `Error ${res.status}`);
   }
 }
