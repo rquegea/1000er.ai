@@ -11,34 +11,68 @@ from app.models.vision import VisionAnalysisResult
 
 ANALYSIS_PROMPT = """You are an expert retail shelf analyst. Analyze this supermarket shelf image with maximum precision.
 
-CRITICAL RULES — read carefully before starting:
+CRITICAL DEFINITION — WHAT IS A "FACING"?
+A "facing" is STRICTLY one product unit whose FRONT FACE is visible in the FIRST ROW of the shelf — the row closest to the customer.
 
-1. NO DUPLICATES: Each unique product (same SKU/reference) must appear as exactly ONE entry, no matter how many shelf rows or positions it occupies. If "Coca-Cola 330ml" appears on the top shelf AND the bottom shelf, output ONE entry with facings summed across ALL rows.
+MANDATORY DEPTH RULE:
+- ONLY count products in the very first row (the front edge of the shelf).
+- NEVER count products behind the first row. Even if you can partially see a second or third row of the same product stacked in depth, those DO NOT count.
+- Depth is IRRELEVANT. If there are 3 identical boxes one behind the other, that is 1 facing, NOT 3.
 
-2. FACINGS = TOTAL VISIBLE UNITS: Count facings as the total number of individual visible units of the same product across the ENTIRE image — every row, every shelf level. Do NOT count only one row. If a product has 3 facings on the top shelf and 4 on the bottom shelf, facings = 7.
+VERTICAL STACKING RULE:
+- Products stacked VERTICALLY on top of each other in the front row DO count as separate facings.
+- Example: 2 boxes of the same cereal stacked on top of each other at the front edge = 2 facings.
 
-3. PARTIALLY VISIBLE PRODUCTS: If a product is partially cut off at the edge of the image, INCLUDE it anyway. Set is_partial: true and count only the facings that are actually visible. Do not ignore edge products.
+STEP-BY-STEP PROCEDURE:
 
-4. CURRENCY DETECTION: Look at the price labels/tags on the shelf. Detect the local currency symbol or code from the labels (€, $, £, ¥, kr, etc.). Return the currency in the "currency" field as ISO 4217 code (EUR, USD, GBP, JPY, etc.). Return the price as a plain number WITHOUT any currency symbol. If no price is visible, set both price and currency to null.
+STEP 1: IDENTIFY SHELF LEVELS
+List every horizontal shelf level visible in the image from top to bottom (e.g., "Shelf 1 (top)", "Shelf 2", "Shelf 3 (bottom)").
 
-5. POSITION: position_x and position_y represent the CENTER of where this product is primarily located. If the product spans multiple rows, use the vertical center of its largest concentration.
+STEP 2: SCAN EACH SHELF LEFT TO RIGHT
+For each shelf level, scan from left to right. For each product you identify, count ONLY the units whose front face is at the very front edge of the shelf. Ignore anything behind them.
 
-6. OUT OF STOCK: Identify empty shelf gaps (visible shelf space with no product) as separate entries with is_oos: true. Set product_name to a description of the gap location (e.g. "Empty gap - top shelf left").
+STEP 3: WRITE YOUR REASONING
+In the "reasoning" field, explain your counting process shelf by shelf BEFORE generating the products array. For each shelf level, list what you see and how many front-row facings each product has. This is your scratch pad — use it to think step by step.
+
+STEP 4: DISTINGUISH PRODUCT VARIANTS
+Different flavors, sizes, or varieties of the same brand are SEPARATE products. Each gets its own entry.
+Example: "Barritas Chocolate Leche" and "Barritas Chocolate Blanco" are TWO distinct entries, even if same brand.
+Do NOT merge them. Use the full specific product name including the variant descriptor.
+
+STEP 5: HANDLE EDGE PRODUCTS
+If a product is partially cut off at the left, right, top, or bottom edge of the image, INCLUDE it as an entry. Set is_partial: true. Count only the facings that are actually visible. Each partial product still counts as at least 1 facing.
+
+STEP 6: AGGREGATE AND VERIFY
+- If the same product appears on multiple shelf levels, output ONE entry with facings summed across all levels.
+- Double-check: did you accidentally count depth as extra facings? If yes, correct it now.
+- A standard supermarket shelf section typically shows between 20 and 60 total visible front-row facings.
+- Make sure no product appears twice in the list (same name = same entry, sum facings).
+
+RULES:
+
+1. NO DUPLICATES: Each unique product (same SKU/reference) must appear as exactly ONE entry.
+
+2. CURRENCY DETECTION: Look at the price labels/tags on the shelf. Detect the local currency symbol or code (€, $, £, etc.). Return the currency as ISO 4217 code (EUR, USD, GBP, etc.). Return the price as a plain number WITHOUT any symbol. If no price is visible, set both price and currency to null.
+
+3. POSITION: position_x and position_y represent the CENTER of where this product is primarily located (0.0 = far left/top, 1.0 = far right/bottom). If the product spans multiple shelf levels, use the center of its largest concentration.
+
+4. OUT OF STOCK: Identify empty shelf gaps (visible shelf space with no product) as separate entries with is_oos: true. Set product_name to a description like "Empty gap - top shelf left".
 
 For EVERY unique product, return:
-- product_name: full product name as shown on packaging
+- product_name: full specific product name including variant (flavor, size, type) as shown on packaging
 - brand: brand name
-- facings: TOTAL visible units across ALL shelf rows (integer)
+- facings: TOTAL front-row-only units summed across ALL shelf levels (integer). NEVER count depth.
 - price: numeric value from shelf label, null if not visible
-- currency: ISO 4217 code detected from price labels, null if no price visible
-- position_x: horizontal center as percentage (0.0 = far left, 1.0 = far right)
-- position_y: vertical center as percentage (0.0 = top shelf, 1.0 = bottom shelf)
+- currency: ISO 4217 code detected from price labels, null if no price
+- position_x: horizontal center (0.0 = far left, 1.0 = far right)
+- position_y: vertical center (0.0 = top shelf, 1.0 = bottom shelf)
 - is_oos: true only for empty gaps, false for products
-- is_partial: true if the product is cut off at image edge, false otherwise
+- is_partial: true if the product is cut off at any image edge
 - confidence: your confidence in this detection from 0.0 to 1.0
 
-Respond ONLY with a valid JSON object, no markdown, no explanation, exactly this structure:
+Respond ONLY with a valid JSON object, no markdown, no explanation:
 {
+  "reasoning": "string",
   "products": [
     {
       "product_name": "string",

@@ -22,5 +22,6 @@ class AnalysisSummary(BaseModel):
 
 
 class VisionAnalysisResult(BaseModel):
+    reasoning: str
     products: list[DetectedProduct]
     summary: AnalysisSummary

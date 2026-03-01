@@ -40,7 +40,6 @@ export default function UploadsPage() {
     if (!file) return;
     setLoading(true);
     setError(null);
-
     try {
       const result = await uploadAndAnalyze(file);
       router.push(`/analysis/${result.analysis.id}`);
@@ -56,160 +55,144 @@ export default function UploadsPage() {
     setError(null);
   };
 
-  return (
-    <div className="flex flex-col items-center">
-      <div className="w-full max-w-2xl">
-        <h1 className="text-2xl font-bold text-slate-900">
-          Analizar Lineal
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Sube una foto de un lineal de supermercado y la IA detectará todos los
-          productos, facings, precios y fuera de stock.
-        </p>
-
-        {/* Loading overlay */}
-        {loading && (
-          <div className="mt-8 flex flex-col items-center gap-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-12">
-            <Spinner size="lg" />
-            <p className="text-sm font-medium text-indigo-700">
-              Analizando imagen con IA...
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-[calc(100vh-48px)] flex-col items-center justify-center pt-12">
+        <div className="animate-fade-up flex flex-col items-center gap-5">
+          <Spinner size="lg" />
+          <div className="text-center">
+            <p className="text-[15px] font-medium text-[#1d1d1f]">
+              Analizando imagen...
             </p>
-            <p className="text-xs text-indigo-500">
+            <p className="mt-1 text-[13px] text-[#86868b]">
               Esto puede tardar unos segundos
             </p>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
 
-        {/* Drop zone — when no file selected and not loading */}
-        {!preview && !loading && (
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`mt-8 flex cursor-pointer flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
-              dragging
-                ? "border-indigo-400 bg-indigo-50"
-                : "border-slate-300 bg-white hover:border-indigo-300 hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50">
-              <svg
-                className="h-7 w-7 text-indigo-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                />
-              </svg>
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-slate-700">
-                Arrastra una imagen aquí o{" "}
-                <span className="text-indigo-600">haz clic para seleccionar</span>
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                JPG, PNG o WebP — máx. 20 MB
-              </p>
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
+  // Preview state
+  if (preview) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 pt-24 pb-16">
+        <div className="animate-fade-up">
+          <div className="overflow-hidden rounded-2xl bg-[#f5f5f7]">
+            <img
+              src={preview}
+              alt="Preview"
+              className="w-full object-contain"
+              style={{ maxHeight: "420px" }}
             />
           </div>
-        )}
 
-        {/* Camera button for mobile */}
-        {!preview && !loading && (
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <svg
-              className="h-5 w-5 text-slate-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
-              />
-            </svg>
-            Capturar foto con cámara
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
-          </button>
-        )}
-
-        {/* Preview */}
-        {preview && !loading && (
-          <div className="mt-8">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <img
-                src={preview}
-                alt="Preview del lineal"
-                className="w-full object-contain"
-                style={{ maxHeight: "400px" }}
-              />
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                {file?.name} —{" "}
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-[13px] text-[#86868b]">
+              {file?.name}
+              <span className="ml-2">
                 {file ? (file.size / 1024 / 1024).toFixed(1) : 0} MB
-              </p>
-              <button
-                onClick={clearSelection}
-                className="text-sm font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cambiar imagen
-              </button>
-            </div>
+              </span>
+            </p>
             <button
-              onClick={handleAnalyze}
-              className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+              onClick={clearSelection}
+              className="text-[13px] text-[#86868b] transition-colors duration-200 hover:text-[#1d1d1f]"
             >
-              Analizar Lineal
+              Cambiar
             </button>
           </div>
-        )}
+
+          <button
+            onClick={handleAnalyze}
+            className="mt-6 w-full rounded-full bg-[#1d1d1f] px-8 py-3.5 text-[15px] font-medium text-white transition-all duration-300 hover:bg-[#000000] hover:shadow-lg active:scale-[0.98]"
+          >
+            Analizar Lineal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Hero + upload state
+  return (
+    <div className="flex min-h-[calc(100vh-48px)] flex-col items-center justify-center px-6 pt-12">
+      <div className="animate-fade-up w-full max-w-lg text-center">
+        <h1 className="text-[40px] font-semibold leading-[1.1] tracking-tight text-[#1d1d1f] sm:text-[56px]">
+          Shelf
+          <br />
+          Intelligence.
+        </h1>
+        <p className="mx-auto mt-4 max-w-sm text-[17px] leading-relaxed text-[#86868b]">
+          Sube una foto de un lineal y detectaremos cada producto, facing, precio
+          y fuera de stock.
+        </p>
+
+        {/* Primary CTA */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="mt-10 inline-flex rounded-full bg-[#1d1d1f] px-8 py-3.5 text-[15px] font-medium text-white transition-all duration-300 hover:bg-[#000000] hover:shadow-lg active:scale-[0.98]"
+        >
+          Analizar Lineal
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
+
+        {/* Secondary: camera */}
+        <div className="mt-3">
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="text-[15px] font-medium text-[#0066cc] transition-colors duration-200 hover:text-[#004499]"
+          >
+            Capturar con cámara
+          </button>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+        </div>
+
+        {/* Drop zone */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          className={`mx-auto mt-16 max-w-sm rounded-2xl border border-dashed p-10 transition-all duration-300 ${
+            dragging
+              ? "border-[#0066cc]/40 bg-[#0066cc]/[0.02]"
+              : "border-[#d2d2d7] hover:border-[#86868b]"
+          }`}
+        >
+          <p className="text-[13px] text-[#86868b]">
+            o arrastra una imagen aquí
+          </p>
+          <p className="mt-1 text-[11px] text-[#d2d2d7]">
+            JPG, PNG, WebP
+          </p>
+        </div>
 
         {/* Error */}
         {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <p className="mt-6 text-[13px] text-[#ff3b30]">{error}</p>
         )}
       </div>
     </div>

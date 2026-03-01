@@ -26,7 +26,7 @@ export default function AnalysisDetailPage({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
         <Spinner size="lg" />
       </div>
     );
@@ -34,11 +34,13 @@ export default function AnalysisDetailPage({
 
   if (error || !analysis) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-red-600">{error || "Análisis no encontrado"}</p>
+      <div className="flex min-h-[calc(100vh-48px)] flex-col items-center justify-center gap-4 pt-12">
+        <p className="text-[15px] text-[#86868b]">
+          {error || "Análisis no encontrado"}
+        </p>
         <Link
           href="/uploads"
-          className="mt-4 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          className="text-[15px] font-medium text-[#0066cc] hover:text-[#004499]"
         >
           Volver
         </Link>
@@ -50,108 +52,105 @@ export default function AnalysisDetailPage({
   const products = analysis.products || [];
 
   return (
-    <div>
+    <div className="mx-auto max-w-5xl px-6 pt-24 pb-20">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="animate-fade-in flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Resultado del Análisis
+          <p className="text-[11px] font-medium uppercase tracking-widest text-[#86868b]">
+            Resultado
+          </p>
+          <h1 className="mt-1 text-[28px] font-semibold tracking-tight text-[#1d1d1f]">
+            Análisis completado
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {new Date(analysis.created_at).toLocaleString("es-ES")} — ID:{" "}
-            {analysis.id.slice(0, 8)}
+          <p className="mt-1 text-[13px] text-[#86868b]">
+            {new Date(analysis.created_at).toLocaleDateString("es-ES", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}{" "}
+            &middot; {analysis.id.slice(0, 8)}
           </p>
         </div>
         <Link
           href="/uploads"
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          className="inline-flex shrink-0 rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"
         >
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4.5v15m7.5-7.5h-15"
-            />
-          </svg>
-          Analizar otra imagen
+          Nuevo análisis
         </Link>
       </div>
 
       {/* KPIs */}
       {summary && (
-        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-12 grid grid-cols-2 gap-x-12 gap-y-8 sm:grid-cols-4">
           <KpiCard label="Productos" value={summary.total_products} />
-          <KpiCard label="Total Facings" value={summary.total_facings} />
+          <KpiCard label="Facings" value={summary.total_facings} />
           <KpiCard
-            label="Fuera de Stock"
+            label="Fuera de stock"
             value={summary.oos_count}
             accent={summary.oos_count > 0}
           />
           <KpiCard
-            label="Confianza Promedio"
+            label="Confianza"
             value={`${(summary.avg_confidence * 100).toFixed(0)}%`}
           />
         </div>
       )}
 
-      {/* Products table */}
-      <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {/* Divider */}
+      <div className="mt-12 h-px bg-[#e5e5ea]" />
+
+      {/* Table */}
+      <div className="mt-8 animate-fade-in">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-xs font-medium uppercase tracking-wider text-slate-500">
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Producto</th>
-                <th className="px-4 py-3">Marca</th>
-                <th className="px-4 py-3 text-center">Facings</th>
-                <th className="px-4 py-3 text-right">Precio</th>
-                <th className="px-4 py-3 text-center">Posición</th>
-                <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-right">Confianza</th>
+              <tr className="text-[11px] font-medium uppercase tracking-widest text-[#86868b]">
+                <th className="pb-3 pr-6 font-medium">Producto</th>
+                <th className="pb-3 pr-6 font-medium">Marca</th>
+                <th className="pb-3 pr-6 text-right font-medium">Facings</th>
+                <th className="pb-3 pr-6 text-right font-medium">Precio</th>
+                <th className="hidden pb-3 pr-6 text-center font-medium sm:table-cell">
+                  Posición
+                </th>
+                <th className="pb-3 pr-6 text-center font-medium">Estado</th>
+                <th className="pb-3 text-right font-medium">Conf.</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {products.map((p, i) => (
+            <tbody>
+              {products.map((p) => (
                 <tr
                   key={p.id}
-                  className="transition-colors hover:bg-slate-50"
+                  className="border-t border-[#f5f5f7] transition-colors duration-150 hover:bg-[#fafafa]"
                 >
-                  <td className="px-4 py-3 text-slate-400">{i + 1}</td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="py-3.5 pr-6 text-[14px] font-medium text-[#1d1d1f]">
                     {p.product_name}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="py-3.5 pr-6 text-[14px] text-[#86868b]">
                     {p.brand || "—"}
                   </td>
-                  <td className="px-4 py-3 text-center font-mono text-slate-900">
+                  <td className="py-3.5 pr-6 text-right font-mono text-[14px] text-[#1d1d1f]">
                     {p.facings}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-900">
-                    {p.price != null ? `$${p.price.toFixed(2)}` : "—"}
+                  <td className="py-3.5 pr-6 text-right font-mono text-[14px] text-[#1d1d1f]">
+                    {p.price != null ? p.price.toFixed(2) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                  <td className="hidden py-3.5 pr-6 text-center font-mono text-[12px] text-[#86868b] sm:table-cell">
                     {p.position_x != null && p.position_y != null
-                      ? `(${p.position_x.toFixed(2)}, ${p.position_y.toFixed(2)})`
+                      ? `${p.position_x.toFixed(2)}, ${p.position_y.toFixed(2)}`
                       : "—"}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="py-3.5 pr-6 text-center">
                     {p.is_oos ? (
-                      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                        Fuera de Stock
+                      <span className="text-[12px] font-medium text-[#ff3b30]">
+                        Sin stock
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                        En Stock
+                      <span className="text-[12px] text-[#86868b]">
+                        OK
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-600">
+                  <td className="py-3.5 text-right font-mono text-[12px] text-[#86868b]">
                     {p.confidence != null
                       ? `${(p.confidence * 100).toFixed(0)}%`
                       : "—"}
@@ -162,9 +161,9 @@ export default function AnalysisDetailPage({
           </table>
         </div>
         {products.length === 0 && (
-          <div className="py-12 text-center text-sm text-slate-400">
+          <p className="py-16 text-center text-[14px] text-[#86868b]">
             No se detectaron productos
-          </div>
+          </p>
         )}
       </div>
     </div>
