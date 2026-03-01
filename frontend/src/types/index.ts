@@ -114,6 +114,7 @@ export interface VisitListResponse {
 
 export interface VisitCreatePayload {
   store_id: string;
+  user_id?: string;
   scheduled_at?: string;
   notes?: string;
 }

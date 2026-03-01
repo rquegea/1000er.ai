@@ -16,13 +16,14 @@ const statusConfig: Record<VisitStatus, { label: string; color: string; bgColor:
 interface VisitModalProps {
   visit: Visit;
   storeName: string;
+  userName: string;
   onClose: () => void;
   onUpdateStatus: (visitId: string, status: VisitStatus) => void;
   onDelete: (visitId: string) => void;
   loading?: boolean;
 }
 
-export default function VisitModal({ visit, storeName, onClose, onUpdateStatus, onDelete, loading }: VisitModalProps) {
+export default function VisitModal({ visit, storeName, userName, onClose, onUpdateStatus, onDelete, loading }: VisitModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const config = statusConfig[visit.status];
 
@@ -107,6 +108,21 @@ export default function VisitModal({ visit, storeName, onClose, onUpdateStatus, 
                 </div>
               </div>
             </>
+          )}
+
+          {userName && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="5.5" r="3" stroke="#86868b" strokeWidth="1.2" />
+                  <path d="M2 14.5C2 11.5 4.5 10 8 10C11.5 10 14 11.5 14 14.5" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">GPV</p>
+                <p className="text-[14px] text-[#1d1d1f]">{userName}</p>
+              </div>
+            </div>
           )}
 
           {visit.notes && (

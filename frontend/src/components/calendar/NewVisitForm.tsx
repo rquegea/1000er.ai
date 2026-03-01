@@ -1,19 +1,21 @@
 "use client";
 
-import { Store } from "@/types";
+import { Store, User } from "@/types";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 interface NewVisitFormProps {
   stores: Store[];
+  users: User[];
   initialDate: Date;
-  onSubmit: (data: { storeId: string; scheduledAt: string; notes: string }) => void;
+  onSubmit: (data: { storeId: string; userId?: string; scheduledAt: string; notes: string }) => void;
   onClose: () => void;
 }
 
-export default function NewVisitForm({ stores, initialDate, onSubmit, onClose }: NewVisitFormProps) {
+export default function NewVisitForm({ stores, users, initialDate, onSubmit, onClose }: NewVisitFormProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [storeId, setStoreId] = useState("");
+  const [userId, setUserId] = useState("");
   const [date, setDate] = useState(format(initialDate, "yyyy-MM-dd"));
   const [time, setTime] = useState("09:00");
   const [notes, setNotes] = useState("");
@@ -48,8 +50,11 @@ export default function NewVisitForm({ stores, initialDate, onSubmit, onClose }:
     e.preventDefault();
     if (!storeId) return;
     const scheduledAt = `${date}T${time}:00`;
-    onSubmit({ storeId, scheduledAt, notes });
+    onSubmit({ storeId, userId: userId || undefined, scheduledAt, notes });
   };
+
+  const userName = (u: User) =>
+    [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
 
   return (
     <div
@@ -62,6 +67,7 @@ export default function NewVisitForm({ stores, initialDate, onSubmit, onClose }:
         <div className="flex items-center justify-between border-b border-[#f5f5f7] p-6 pb-4">
           <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Nueva visita</h3>
           <button
+            type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full text-[#86868b] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
           >
@@ -133,6 +139,27 @@ export default function NewVisitForm({ stores, initialDate, onSubmit, onClose }:
                 </div>
               )}
             </div>
+
+            {/* GPV selector */}
+            {users.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-[#86868b]">
+                  GPV Responsable
+                </label>
+                <select
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className="w-full rounded-xl border border-[#e5e5ea] bg-white px-4 py-3 text-[14px] text-[#1d1d1f] transition-colors hover:border-[#86868b] focus:border-[#007aff] focus:outline-none focus:ring-2 focus:ring-[#007aff]/20"
+                >
+                  <option value="">Yo mismo</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {userName(u)} — {u.role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Date & Time */}
             <div className="grid grid-cols-2 gap-3">

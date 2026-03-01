@@ -5,7 +5,7 @@ import CalendarGrid from "@/components/calendar/CalendarGrid";
 import NewVisitForm from "@/components/calendar/NewVisitForm";
 import VisitModal from "@/components/calendar/VisitModal";
 import Spinner from "@/components/Spinner";
-import { Store, Visit, VisitStatus } from "@/types";
+import { Store, User, Visit, VisitStatus } from "@/types";
 import {
   listVisits,
   createVisit,
@@ -14,6 +14,7 @@ import {
   updateVisit,
   deleteVisit,
   listStores,
+  listUsers,
 } from "@/lib/api";
 import { addMonths, subMonths } from "date-fns";
 
@@ -32,6 +33,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [visits, setVisits] = useState<Visit[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,15 +41,18 @@ export default function CalendarPage() {
   const [newVisitDate, setNewVisitDate] = useState<Date | null>(null);
 
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+  const userMap = new Map(users.map((u) => [u.id, [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email]));
 
   const fetchData = useCallback(async () => {
     try {
-      const [visitsRes, storesRes] = await Promise.all([
+      const [visitsRes, storesRes, usersRes] = await Promise.all([
         listVisits(200),
         listStores(200),
+        listUsers(200),
       ]);
       setVisits(visitsRes.data);
       setStores(storesRes.data);
+      setUsers(usersRes.data);
     } catch {
       setError("Error al cargar datos");
     } finally {
@@ -102,10 +107,11 @@ export default function CalendarPage() {
     }
   };
 
-  const handleCreateVisit = async (data: { storeId: string; scheduledAt: string; notes: string }) => {
+  const handleCreateVisit = async (data: { storeId: string; userId?: string; scheduledAt: string; notes: string }) => {
     try {
       await createVisit({
         store_id: data.storeId,
+        user_id: data.userId,
         scheduled_at: data.scheduledAt,
         notes: data.notes || undefined,
       });
@@ -191,6 +197,7 @@ export default function CalendarPage() {
         <VisitModal
           visit={selectedVisit}
           storeName={storeMap.get(selectedVisit.store_id) || "—"}
+          userName={userMap.get(selectedVisit.user_id) || "—"}
           onClose={() => setSelectedVisit(null)}
           onUpdateStatus={handleUpdateStatus}
           onDelete={handleDeleteVisit}
@@ -202,6 +209,7 @@ export default function CalendarPage() {
       {newVisitDate && (
         <NewVisitForm
           stores={stores}
+          users={users}
           initialDate={newVisitDate}
           onSubmit={handleCreateVisit}
           onClose={() => setNewVisitDate(null)}

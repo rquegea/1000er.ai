@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/v1/visits", tags=["visits"])
 
 class VisitCreate(BaseModel):
     store_id: str
+    user_id: str | None = None  # Admin can assign to a GPV; defaults to current user
     scheduled_at: str | None = None
     notes: str | None = None
 
@@ -53,7 +54,7 @@ async def create_visit(body: VisitCreate, user: CurrentUser = Depends(get_curren
     payload = {
         "tenant_id": user.tenant_id,
         "store_id": body.store_id,
-        "user_id": user.user_id,
+        "user_id": body.user_id or user.user_id,
         "status": "scheduled",
     }
     if body.scheduled_at:
@@ -67,7 +68,7 @@ async def create_visit(body: VisitCreate, user: CurrentUser = Depends(get_curren
 
 @router.get("/", response_model=VisitListOut)
 async def list_visits(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = Depends(get_current_user),
 ):
