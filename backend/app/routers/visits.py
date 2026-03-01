@@ -38,7 +38,7 @@ def _row_to_out(row: dict) -> VisitOut:
         user_id=row["user_id"],
         scheduled_at=row.get("scheduled_at"),
         started_at=row.get("started_at"),
-        completed_at=row.get("completed_at"),
+        ended_at=row.get("ended_at"),
         duration_minutes=row.get("duration_minutes"),
         status=row["status"],
         notes=row.get("notes"),
@@ -174,8 +174,8 @@ async def start_visit(visit_id: str):
     return _row_to_out(row.data[0])
 
 
-@router.post("/{visit_id}/complete", response_model=VisitOut)
-async def complete_visit(visit_id: str):
+@router.post("/{visit_id}/end", response_model=VisitOut)
+async def end_visit(visit_id: str):
     tenant_id = settings.mvp_tenant_id
     sb = get_supabase_client()
 
@@ -195,7 +195,7 @@ async def complete_visit(visit_id: str):
     if visit["status"] != "in_progress":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot complete visit with status '{visit['status']}'. Must be 'in_progress'.",
+            detail=f"Cannot end visit with status '{visit['status']}'. Must be 'in_progress'.",
         )
 
     now = datetime.now(timezone.utc)
@@ -208,7 +208,7 @@ async def complete_visit(visit_id: str):
         sb.table("visits")
         .update({
             "status": "completed",
-            "completed_at": now.isoformat(),
+            "ended_at": now.isoformat(),
             "duration_minutes": duration,
         })
         .eq("id", visit_id)
