@@ -17,7 +17,7 @@ def get_supabase_client() -> Client:
 
 security = HTTPBearer()
 
-jwks_client = PyJWKClient(f"{settings.supabase_url}/rest/v1/.well-known/jwks.json")
+jwks_client = PyJWKClient(f"{settings.supabase_url}/auth/v1/.well-known/jwks.json")
 
 
 class CurrentUser:
@@ -45,12 +45,25 @@ async def get_current_user(
         )
 
     user_id = payload.get("sub")
-    tenant_id = (payload.get("app_metadata") or {}).get("tenant_id")
-
-    if not tenant_id or not user_id:
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing tenant_id or user_id in token",
+            detail="Missing user_id in token",
+        )
+
+    tenant_id = (payload.get("app_metadata") or {}).get("tenant_id")
+
+    # Fallback: look up tenant_id from users table if not in JWT
+    if not tenant_id:
+        sb = get_supabase_client()
+        row = sb.table("users").select("tenant_id").eq("id", user_id).execute()
+        if row.data:
+            tenant_id = row.data[0]["tenant_id"]
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing tenant_id for user",
         )
 
     return CurrentUser(tenant_id=tenant_id, user_id=user_id)

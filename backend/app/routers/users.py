@@ -37,7 +37,7 @@ async def get_me(user: CurrentUser = Depends(get_current_user)):
 
 @router.get("/", response_model=UserListOut)
 async def list_users(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = Depends(get_current_user),
 ):

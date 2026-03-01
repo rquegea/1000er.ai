@@ -218,7 +218,7 @@ async def get_analysis(analysis_id: str, user: CurrentUser = Depends(get_current
 
 @router.get("/", response_model=AnalysisListOut)
 async def list_analyses(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = Depends(get_current_user),
 ):
