@@ -47,3 +47,21 @@ export interface AnalysisListResponse {
   limit: number;
   offset: number;
 }
+
+export type VisitStatus = "scheduled" | "in_progress" | "completed" | "cancelled" | "missed";
+
+export interface Visit {
+  id: string;
+  storeId: string;
+  storeName: string;
+  scheduledAt: string;
+  status: VisitStatus;
+  notes?: string;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  address?: string;
+  chain?: string;
+}

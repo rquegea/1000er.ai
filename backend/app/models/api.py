@@ -53,3 +53,67 @@ class AnalysisListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Chains ──────────────────────────────────────────────────
+
+
+class ChainOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    logo_url: str | None = None
+    website: str | None = None
+    country: str | None = None
+    created_at: str
+
+
+class ChainListOut(BaseModel):
+    data: list[ChainOut]
+    total: int
+    limit: int
+    offset: int
+
+
+# ── Brands ──────────────────────────────────────────────────
+
+
+class BrandOut(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    logo_url: str | None = None
+    is_own: bool
+    category: str | None = None
+    created_at: str
+
+
+class BrandListOut(BaseModel):
+    data: list[BrandOut]
+    total: int
+    limit: int
+    offset: int
+
+
+# ── Visits ──────────────────────────────────────────────────
+
+
+class VisitOut(BaseModel):
+    id: str
+    tenant_id: str
+    store_id: str
+    user_id: str
+    scheduled_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_minutes: int | None = None
+    status: str
+    notes: str | None = None
+    created_at: str
+
+
+class VisitListOut(BaseModel):
+    data: list[VisitOut]
+    total: int
+    limit: int
+    offset: int

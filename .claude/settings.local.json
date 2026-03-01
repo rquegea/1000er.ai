@@ -36,7 +36,25 @@
       "Bash(cd /Users/macbook/Desktop/1000er.ai/backend && uvicorn app.main:app --reload)",
       "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm run dev)",
       "Bash(which python3 && python3 -m uvicorn --version 2>&1 || echo \"uvicorn not found via python3 -m\")",
-      "Bash(cd /Users/macbook/Desktop/1000er.ai/backend && python3 -m uvicorn app.main:app --reload)"
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/backend && python3 -m uvicorn app.main:app --reload)",
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm install recharts leaflet react-leaflet @types/leaflet)",
+      "Bash(ls -la /Users/macbook/Desktop/1000er.ai/frontend/*.* | grep -E \"config|tsconfig\")",
+      "Bash(find /Users/macbook/Desktop/1000er.ai/frontend -type f \\\\\\( -name \"*[Kk]pi*\" -o -name \"*[Cc]omponent*\" \\\\\\) 2>/dev/null | head -20)",
+      "Bash(npm install date-fns)",
+      "Bash(npm run build 2>&1 | tail -40)",
+      "Bash(source .env && psql \"$DATABASE_URL\" -f ../supabase/migrations/002_gpv_core.sql)",
+      "Bash(npm ls date-fns 2>&1 || echo \"NOT FOUND\")",
+      "Bash(npm run build 2>&1 | tail -20)",
+      "Bash(python3 -c \"from app.main import app; print\\('App loaded OK'\\); print\\('Routes:'\\); [print\\(f'  {r.path} [{\\\\\",\\\\\".join\\(r.methods\\)}]'\\) for r in app.routes if hasattr\\(r, 'methods'\\)]\")",
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom @vitejs/plugin-react 2>&1 | tail -5)",
+      "Bash(ping -c 1 -t 3 db.gbytqybbjbbbjtuuuluq.supabase.co 2>&1 | head -3)",
+      "Bash(ping -c 1 -t 3 gbytqybbjbbbjtuuuluq.supabase.co 2>&1 | head -3)",
+      "Bash(npx next build 2>&1 | tail -30)",
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/backend && pip install pytest pytest-asyncio httpx 2>&1 | tail -5)",
+      "Bash(python3 -c \"\nfrom app.deps import get_supabase_client\nsb = get_supabase_client\\(\\)\n\n# Read the migration SQL\nwith open\\('../supabase/migrations/002_gpv_core.sql', 'r'\\) as f:\n    sql = f.read\\(\\)\n\n# Execute via rpc if available, otherwise try direct\nresult = sb.rpc\\('exec_sql', {'query': sql}\\).execute\\(\\)\nprint\\('Result:', result\\)\n\" 2>&1)",
+      "Bash(which python3 && python3 -m pip install pytest pytest-asyncio httpx 2>&1 | tail -5)",
+      "Bash(python3 -m pytest tests/ -v 2>&1)",
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm test 2>&1)"
     ]
   }
 }

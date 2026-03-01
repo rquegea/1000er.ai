@@ -31,8 +31,25 @@ List every horizontal shelf level visible in the image from top to bottom (e.g.,
 STEP 2: SCAN EACH SHELF LEFT TO RIGHT
 For each shelf level, scan from left to right. For each product you identify, count ONLY the units whose front face is at the very front edge of the shelf. Ignore anything behind them.
 
-STEP 3: WRITE YOUR REASONING
-In the "reasoning" field, explain your counting process shelf by shelf BEFORE generating the products array. For each shelf level, list what you see and how many front-row facings each product has. This is your scratch pad — use it to think step by step.
+STEP 3: SPATIAL GROUNDING — BUILD A COUNTING TABLE
+In the "reasoning" field you MUST build a markdown table with exactly these columns BEFORE generating the products array:
+
+| Shelf | Product | Front-row units | Notes |
+
+Rules for filling the table:
+- One row per product per shelf level. Do NOT skip any product.
+- "Front-row units": list the horizontal position of EACH unit you count (e.g., "left, center, right → 3"). You are FORBIDDEN from writing just a number — you must name each position first, then write the total.
+- "Notes": mention if you see depth behind the front row (and confirm you are ignoring it), if the product is partially cut off (is_partial), or any other observation.
+- Use the price tags / price labels on the shelf edge as visual anchors to determine where one product block ends and another begins. Price tags mark the boundaries of each product's allocated space.
+
+EXAMPLE TABLE (for illustration only — your actual table must reflect the real image):
+| Shelf | Product | Front-row units | Notes |
+|-------|---------|-----------------|-------|
+| 2 | Nature Valley Crunchy | left, center, right → 3 | 2 more boxes visible behind front row — ignored |
+| 2 | Digestive Avena | left, center-left, center, center-right → 4 | |
+| 3 | Nature Valley Crunchy | left, right → 2 | partially cut off on right edge, is_partial |
+
+After completing the table, sum facings per product across all shelves to get the final count for each entry.
 
 STEP 4: DISTINGUISH PRODUCT VARIANTS
 Different flavors, sizes, or varieties of the same brand are SEPARATE products. Each gets its own entry.
@@ -42,11 +59,35 @@ Do NOT merge them. Use the full specific product name including the variant desc
 STEP 5: HANDLE EDGE PRODUCTS
 If a product is partially cut off at the left, right, top, or bottom edge of the image, INCLUDE it as an entry. Set is_partial: true. Count only the facings that are actually visible. Each partial product still counts as at least 1 facing.
 
-STEP 6: AGGREGATE AND VERIFY
+STEP 6: AGGREGATE
 - If the same product appears on multiple shelf levels, output ONE entry with facings summed across all levels.
-- Double-check: did you accidentally count depth as extra facings? If yes, correct it now.
-- A standard supermarket shelf section typically shows between 20 and 60 total visible front-row facings.
-- Make sure no product appears twice in the list (same name = same entry, sum facings).
+
+STEP 7: SELF-CHECK (mandatory — do this before writing the JSON)
+Answer these three questions in the "reasoning" field, right after the table:
+1. DUPLICATES — Does any product appear more than once in my final list? If yes → merge into one entry and sum facings.
+2. DEPTH — Did I accidentally count units behind the front row as extra facings? If yes → subtract them now.
+3. EDGE PRODUCTS — Did I include every product that is partially visible at the edges of the image with is_partial: true? If I missed any → add them.
+Only after answering all three questions, proceed to generate the JSON.
+
+SANITY CHECK:
+- A standard supermarket shelf section typically shows between 15 and 80 total visible front-row facings.
+- If your total is outside this range, re-examine your table.
+
+PERSPECTIVE CORRECTION:
+If the photo is taken at an angle (not perfectly frontal), only count products clearly in the front row at the near edge. Products appearing smaller in the background are NOT first row.
+
+IGNORE THESE — they are NOT products:
+- Price tag rails or label strips
+- Promotional signs or banners
+- Shelf dividers or plastic separators
+- Reflections in glass/mirrors
+- Products clearly fallen over (set confidence 0.3 max)
+
+PRICE ASSIGNMENT RULE:
+In Spanish supermarkets (Mercadona, Carrefour, etc.), price labels are typically on the shelf edge BELOW the product, not on the packaging. Assign each price label to the product directly above it.
+
+LOW CONFIDENCE ZONES:
+If part of the image is blurry, dark, or overexposed, still detect products but set confidence ≤ 0.5 for those zones.
 
 RULES:
 

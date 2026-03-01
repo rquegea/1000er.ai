@@ -10,3 +10,5 @@ sqlalchemy
 google-genai
 httpx
 python-multipart
+pytest
+pytest-asyncio
