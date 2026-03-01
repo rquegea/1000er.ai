@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     vision_pipeline: str = "v2"
     roboflow_api_key: str = ""
     roboflow_model_url: str = "https://infer.roboflow.com/grounding_dino/infer"
-    detection_text_prompt: str = "product . bottle . box . can . package . bag . carton"
-    detection_confidence_threshold: float = 0.25
+    detection_text_prompt: str = "product . bottle . box . can . package . bag . carton . food"
+    detection_confidence_threshold: float = 0.15
     detection_nms_iou_threshold: float = 0.45
     mosaic_cell_size: int = 150
     mosaic_columns: int = 8

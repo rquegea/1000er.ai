@@ -49,6 +49,7 @@ In Spanish supermarkets, price labels are on the shelf edge BELOW the product. A
 
 OUT OF STOCK:
 If you see an empty gap on the shelf in the original image where NO crops were detected, add an entry with crop_ids: [], is_oos: true, and describe the location in product_name (e.g. "Empty gap - shelf 2 center").
+IMPORTANT: Only report OOS if you see a clearly EMPTY shelf section with NO product at all in the original image — just bare shelf or a visible gap between products. If you see products in the original image that do NOT have corresponding numbered crops in the mosaic, do NOT mark them as OOS. The detector may have missed them. Simply ignore products that appear in the original image but are missing from the mosaic.
 
 POSITION:
 position_x and position_y represent the CENTER of the product group on the shelf (0.0 = far left/top, 1.0 = far right/bottom). Estimate from where the group's crops appear in the original image.
