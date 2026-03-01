@@ -15,12 +15,15 @@ def _row_to_out(row: dict) -> StoreOut:
         chain=row.get("chain"),
         responsible_user_id=row.get("responsible_user_id"),
         key_account_id=row.get("key_account_id"),
+        contact_name=row.get("contact_name"),
         phone_section_manager=row.get("phone_section_manager"),
         email_section_manager=row.get("email_section_manager"),
         phone_sector_manager=row.get("phone_sector_manager"),
         email_sector_manager=row.get("email_sector_manager"),
         region=row.get("region"),
         area=row.get("area"),
+        latitude=row.get("latitude"),
+        longitude=row.get("longitude"),
         created_at=row["created_at"],
     )
 
@@ -36,9 +39,9 @@ async def create_store(
     payload = {"tenant_id": admin.tenant_id, "name": body.name}
     for field in (
         "address", "chain", "responsible_user_id", "key_account_id",
-        "phone_section_manager", "email_section_manager",
+        "contact_name", "phone_section_manager", "email_section_manager",
         "phone_sector_manager", "email_sector_manager",
-        "region", "area",
+        "region", "area", "latitude", "longitude",
     ):
         val = getattr(body, field)
         if val is not None:

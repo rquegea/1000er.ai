@@ -51,12 +51,15 @@ class StoreCreate(BaseModel):
     chain: str | None = None
     responsible_user_id: str | None = None
     key_account_id: str | None = None
+    contact_name: str | None = None
     phone_section_manager: str | None = None
     email_section_manager: str | None = None
     phone_sector_manager: str | None = None
     email_sector_manager: str | None = None
     region: str | None = None
     area: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class StoreUpdate(BaseModel):
@@ -65,12 +68,15 @@ class StoreUpdate(BaseModel):
     chain: str | None = None
     responsible_user_id: str | None = None
     key_account_id: str | None = None
+    contact_name: str | None = None
     phone_section_manager: str | None = None
     email_section_manager: str | None = None
     phone_sector_manager: str | None = None
     email_sector_manager: str | None = None
     region: str | None = None
     area: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class StoreOut(BaseModel):
@@ -81,12 +87,15 @@ class StoreOut(BaseModel):
     chain: str | None = None
     responsible_user_id: str | None = None
     key_account_id: str | None = None
+    contact_name: str | None = None
     phone_section_manager: str | None = None
     email_section_manager: str | None = None
     phone_sector_manager: str | None = None
     email_sector_manager: str | None = None
     region: str | None = None
     area: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     created_at: str
 
 

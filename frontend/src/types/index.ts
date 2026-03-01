@@ -134,12 +134,15 @@ export interface Store {
   chain: string | null;
   responsible_user_id: string | null;
   key_account_id: string | null;
+  contact_name: string | null;
   phone_section_manager: string | null;
   email_section_manager: string | null;
   phone_sector_manager: string | null;
   email_sector_manager: string | null;
   region: string | null;
   area: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
 }
 
@@ -156,12 +159,15 @@ export interface StoreCreatePayload {
   chain?: string;
   responsible_user_id?: string;
   key_account_id?: string;
+  contact_name?: string;
   phone_section_manager?: string;
   email_section_manager?: string;
   phone_sector_manager?: string;
   email_sector_manager?: string;
   region?: string;
   area?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface StoreUpdatePayload {
@@ -170,10 +176,13 @@ export interface StoreUpdatePayload {
   chain?: string;
   responsible_user_id?: string;
   key_account_id?: string;
+  contact_name?: string;
   phone_section_manager?: string;
   email_section_manager?: string;
   phone_sector_manager?: string;
   email_sector_manager?: string;
   region?: string;
   area?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }

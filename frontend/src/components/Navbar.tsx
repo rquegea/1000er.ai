@@ -2,20 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/components/AuthProvider";
 
 const links = [
   { href: "/uploads", label: "Analizar" },
-  { href: "/dashboard", label: "Historial" },
   { href: "/calendar", label: "Calendario" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/stores", label: "Tiendas" },
-  { href: "/users", label: "Equipo" },
+  { href: "/analysis", label: "Análisis" },
+  { href: "/settings", label: "Configuración" },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { session, signOut } = useAuth();
 
   // Don't show navbar on login page
   if (pathname.startsWith("/login")) return null;
@@ -47,14 +43,6 @@ export default function Navbar() {
               </Link>
             );
           })}
-          {session && (
-            <button
-              onClick={signOut}
-              className="text-[13px] text-[#86868b] transition-colors duration-200 hover:text-[#ff3b30]"
-            >
-              Salir
-            </button>
-          )}
         </div>
       </div>
     </nav>

@@ -163,6 +163,43 @@ async def upload_and_analyze(
     )
 
 
+@router.get("/", response_model=AnalysisListOut)
+async def list_analyses(
+    limit: int = Query(default=20, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """List analyses for the current tenant with pagination."""
+    sb = get_supabase_client()
+
+    rows = (
+        sb.table("analyses")
+        .select("*", count="exact")
+        .eq("tenant_id", user.tenant_id)
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
+
+    total = rows.count if rows.count is not None else len(rows.data)
+
+    return AnalysisListOut(
+        data=[
+            AnalysisOut(
+                id=a["id"],
+                tenant_id=a["tenant_id"],
+                shelf_upload_id=a["shelf_upload_id"],
+                status=a["status"],
+                created_at=a["created_at"],
+            )
+            for a in rows.data
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/{analysis_id}", response_model=AnalysisDetailOut)
 async def get_analysis(analysis_id: str, user: CurrentUser = Depends(get_current_user)):
     """Get a single analysis with all its detected products."""
@@ -213,41 +250,4 @@ async def get_analysis(analysis_id: str, user: CurrentUser = Depends(get_current
             )
             for p in prod_rows.data
         ],
-    )
-
-
-@router.get("/", response_model=AnalysisListOut)
-async def list_analyses(
-    limit: int = Query(default=20, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    user: CurrentUser = Depends(get_current_user),
-):
-    """List analyses for the current tenant with pagination."""
-    sb = get_supabase_client()
-
-    rows = (
-        sb.table("analyses")
-        .select("*", count="exact")
-        .eq("tenant_id", user.tenant_id)
-        .order("created_at", desc=True)
-        .range(offset, offset + limit - 1)
-        .execute()
-    )
-
-    total = rows.count if rows.count is not None else len(rows.data)
-
-    return AnalysisListOut(
-        data=[
-            AnalysisOut(
-                id=a["id"],
-                tenant_id=a["tenant_id"],
-                shelf_upload_id=a["shelf_upload_id"],
-                status=a["status"],
-                created_at=a["created_at"],
-            )
-            for a in rows.data
-        ],
-        total=total,
-        limit=limit,
-        offset=offset,
     )
