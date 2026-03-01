@@ -7,12 +7,15 @@ V2 pipeline:
 Legacy: Single-pass Gemini analysis (original approach, used as fallback).
 """
 
+import io
 import json
 import base64
 import logging
+import time
 from typing import Any
 
 import httpx
+from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
@@ -23,7 +26,7 @@ from app.models.vision import (
     DetectedProduct,
     VisionAnalysisResult,
 )
-from app.services.detection import DetectionError, detect_products
+from app.services.detection import DetectionError, DetectionResult, detect_products
 from app.services.mosaic import MosaicResult, generate_mosaics
 
 logger = logging.getLogger("vision")
@@ -308,6 +311,48 @@ async def _analyze(
     return await _analyze_legacy(image_bytes, mime_type)
 
 
+# ── Debug helpers ─────────────────────────────────────────────────────────
+
+
+def _save_debug_images(
+    image_bytes: bytes,
+    detection_result: DetectionResult,
+    mosaic_result: MosaicResult,
+) -> None:
+    """Save annotated detection image and mosaic to /tmp/ for visual debugging."""
+    ts = int(time.time())
+
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    w, h = img.size
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+    except OSError:
+        font = ImageFont.load_default()
+
+    for i, det in enumerate(detection_result.detections, start=1):
+        x_min = int(det.bbox[0] * w)
+        y_min = int(det.bbox[1] * h)
+        x_max = int(det.bbox[2] * w)
+        y_max = int(det.bbox[3] * h)
+
+        draw.rectangle([x_min, y_min, x_max, y_max], outline="lime", width=2)
+        label = f"#{i} {det.score:.2f}"
+        draw.text((x_min + 2, y_min + 2), label, fill="lime", font=font)
+
+    det_path = f"/tmp/debug_detection_{ts}.png"
+    img.save(det_path)
+    logger.info("Debug detection image saved: %s", det_path)
+
+    for j, mosaic_bytes in enumerate(mosaic_result.mosaic_bytes):
+        suffix = f"_{j}" if len(mosaic_result.mosaic_bytes) > 1 else ""
+        mosaic_path = f"/tmp/debug_mosaic_{ts}{suffix}.png"
+        mosaic_img = Image.open(io.BytesIO(mosaic_bytes))
+        mosaic_img.save(mosaic_path)
+        logger.info("Debug mosaic image saved: %s", mosaic_path)
+
+
 # ── V2 Pipeline ────────────────────────────────────────────────────────────
 
 
@@ -336,6 +381,13 @@ async def _analyze_v2(
         mosaic_result.total_crops,
         len(mosaic_result.mosaic_bytes),
     )
+
+    # Save debug images if enabled
+    if settings.debug_detection:
+        try:
+            _save_debug_images(image_bytes, detection_result, mosaic_result)
+        except Exception as exc:
+            logger.warning("Failed to save debug images: %s", exc)
 
     # Phase 2: Gemini classification
     classification = await _phase2_classify(

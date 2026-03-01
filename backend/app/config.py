@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     mosaic_padding: int = 4
     mosaic_max_crops: int = 80
     gemini_v2_temperature: float = 0.2
+    debug_detection: bool = False
 
     @property
     def cors_origins(self) -> list[str]:
