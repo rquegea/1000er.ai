@@ -55,7 +55,7 @@ export default function HistoryPage() {
           </p>
         </div>
         <Link
-          href="/uploads"
+          href="/analysis/analytics"
           className="inline-flex rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"
         >
           Nuevo análisis
@@ -71,7 +71,7 @@ export default function HistoryPage() {
             Aún no hay análisis
           </p>
           <Link
-            href="/uploads"
+            href="/analysis/analytics"
             className="mt-2 inline-block text-[15px] font-medium text-[#0066cc] hover:text-[#004499]"
           >
             Analiza tu primer lineal

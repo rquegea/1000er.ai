@@ -182,3 +182,42 @@ class VisitListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Visit Photos ───────────────────────────────────────────
+
+
+class VisitPhotoOut(BaseModel):
+    id: str
+    tenant_id: str
+    visit_id: str
+    category: str
+    image_url: str
+    analysis_id: str | None = None
+    uploaded_by: str
+    notes: str | None = None
+    created_at: str
+
+
+class VisitPhotoListOut(BaseModel):
+    data: list[VisitPhotoOut]
+    total: int
+
+
+class OosProductOut(BaseModel):
+    product_name: str
+    brand: str | None = None
+
+
+class VisitSummaryOut(BaseModel):
+    visit: VisitOut
+    store_name: str
+    store_chain: str | None = None
+    store_address: str | None = None
+    photos_count: dict
+    analyses_count: int
+    total_products: int
+    total_facings: int
+    oos_count: int
+    avg_confidence: float | None = None
+    oos_products: list[OosProductOut] = []

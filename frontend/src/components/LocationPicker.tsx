@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Map, { Marker } from "react-map-gl/mapbox";
+import "mapbox-gl/dist/mapbox-gl.css";
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 interface LocationPickerProps {
   address: string;
@@ -19,63 +23,40 @@ export default function LocationPicker({
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [MapComponents, setMapComponents] = useState<{
-    MapContainer: typeof import("react-leaflet").MapContainer;
-    TileLayer: typeof import("react-leaflet").TileLayer;
-    Marker: typeof import("react-leaflet").Marker;
-    Popup: typeof import("react-leaflet").Popup;
-  } | null>(null);
-  const [leafletIcon, setLeafletIcon] = useState<L.Icon | null>(null);
-
-  useEffect(() => {
-    // @ts-expect-error -- CSS module imported at runtime for SSR safety
-    import("leaflet/dist/leaflet.css");
-    Promise.all([import("react-leaflet"), import("leaflet")]).then(
-      ([rl, L]) => {
-        setMapComponents({
-          MapContainer: rl.MapContainer,
-          TileLayer: rl.TileLayer,
-          Marker: rl.Marker,
-          Popup: rl.Popup,
-        });
-        setLeafletIcon(
-          new L.default.Icon({
-            iconUrl:
-              "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-            iconRetinaUrl:
-              "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-            shadowUrl:
-              "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41],
-          })
-        );
-      }
-    );
-  }, []);
-
   const geocode = useCallback(
     async (query: string) => {
       if (!query || query.length < 5) return;
       setGeocoding(true);
       setGeocodeError(null);
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-          {
-            headers: { "Accept-Language": "es" },
+        let data;
+        if (MAPBOX_TOKEN) {
+          // Use Mapbox Geocoding API
+          const res = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=es`
+          );
+          const json = await res.json();
+          if (json.features && json.features.length > 0) {
+            const [lng, lat] = json.features[0].center;
+            onLocationChange(lat, lng);
+            return;
           }
-        );
-        const data = await res.json();
-        if (data.length > 0) {
-          onLocationChange(parseFloat(data[0].lat), parseFloat(data[0].lon));
+          data = [];
         } else {
-          setGeocodeError("No se encontró la ubicación");
+          // Fallback to Nominatim
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+            { headers: { "Accept-Language": "es" } }
+          );
+          data = await res.json();
+          if (data.length > 0) {
+            onLocationChange(parseFloat(data[0].lat), parseFloat(data[0].lon));
+            return;
+          }
         }
+        setGeocodeError("No se encontro la ubicacion");
       } catch {
-        setGeocodeError("Error al buscar ubicación");
+        setGeocodeError("Error al buscar ubicacion");
       } finally {
         setGeocoding(false);
       }
@@ -100,7 +81,7 @@ export default function LocationPicker({
     <div>
       <div className="flex items-center gap-2">
         {geocoding && (
-          <p className="text-[11px] text-[#86868b]">Buscando ubicación...</p>
+          <p className="text-[11px] text-[#86868b]">Buscando ubicacion...</p>
         )}
         {geocodeError && (
           <p className="text-[11px] text-[#ff9500]">{geocodeError}</p>
@@ -112,30 +93,32 @@ export default function LocationPicker({
         )}
       </div>
 
-      {hasLocation && MapComponents && leafletIcon && (
+      {hasLocation && MAPBOX_TOKEN && (
         <div className="mt-2 overflow-hidden rounded-xl border border-[#e5e5ea]">
-          <MapComponents.MapContainer
+          <Map
             key={`${latitude}-${longitude}`}
-            center={[latitude!, longitude!]}
-            zoom={15}
-            style={{ height: 180, width: "100%" }}
-            scrollWheelZoom={false}
-            dragging={false}
-            zoomControl={false}
+            initialViewState={{
+              latitude: latitude!,
+              longitude: longitude!,
+              zoom: 15,
+            }}
+            style={{ width: "100%", height: 180 }}
+            mapStyle="mapbox://styles/mapbox/light-v11"
+            mapboxAccessToken={MAPBOX_TOKEN}
+            interactive={false}
           >
-            <MapComponents.TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            />
-            <MapComponents.Marker
-              position={[latitude!, longitude!]}
-              icon={leafletIcon}
-            >
-              <MapComponents.Popup>
-                <span style={{ fontSize: 12 }}>{address}</span>
-              </MapComponents.Popup>
-            </MapComponents.Marker>
-          </MapComponents.MapContainer>
+            <Marker latitude={latitude!} longitude={longitude!} anchor="bottom">
+              <div className="flex h-8 w-8 items-center justify-center">
+                <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+                  <path
+                    d="M12 0C5.4 0 0 5.4 0 12C0 21 12 32 12 32S24 21 24 12C24 5.4 18.6 0 12 0Z"
+                    fill="#1d1d1f"
+                  />
+                  <circle cx="12" cy="11" r="4" fill="white" />
+                </svg>
+              </div>
+            </Marker>
+          </Map>
         </div>
       )}
     </div>

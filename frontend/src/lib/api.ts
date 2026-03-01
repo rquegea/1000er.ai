@@ -14,6 +14,10 @@ import type {
   VisitListResponse,
   VisitCreatePayload,
   VisitUpdatePayload,
+  VisitPhoto,
+  VisitPhotoListResponse,
+  VisitSummary,
+  PhotoCategory,
 } from "@/types";
 import { createBrowserClient } from "@/lib/supabase";
 
@@ -208,6 +212,14 @@ export async function deleteStore(storeId: string): Promise<void> {
 
 // ── Visits ────────────────────────────────────────────────
 
+export async function getVisit(visitId: string): Promise<Visit> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}`);
+  if (!res.ok) {
+    throw new Error(`Visit not found (${res.status})`);
+  }
+  return res.json();
+}
+
 export async function listVisits(
   limit = 100,
   offset = 0
@@ -280,4 +292,66 @@ export async function deleteVisit(visitId: string): Promise<void> {
     const err = await res.json().catch(() => ({ detail: "Failed to delete visit" }));
     throw new Error(err.detail || `Error ${res.status}`);
   }
+}
+
+// ── Visit Photos ─────────────────────────────────────────
+
+export async function uploadVisitPhoto(
+  visitId: string,
+  file: File,
+  category: PhotoCategory,
+  notes?: string
+): Promise<VisitPhoto> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("category", category);
+  if (notes) formData.append("notes", notes);
+
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/photos`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to upload photo" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function listVisitPhotos(
+  visitId: string,
+  category?: PhotoCategory
+): Promise<VisitPhotoListResponse> {
+  const params = category ? `?category=${category}` : "";
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/photos${params}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch visit photos (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function deleteVisitPhoto(
+  visitId: string,
+  photoId: string
+): Promise<void> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/photos/${photoId}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to delete photo" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+}
+
+export async function getVisitSummary(visitId: string): Promise<VisitSummary> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/summary`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch visit summary (${res.status})`);
+  }
+  return res.json();
 }

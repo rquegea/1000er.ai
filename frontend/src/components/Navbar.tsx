@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/uploads", label: "Analizar" },
+  { href: "/", label: "Home" },
   { href: "/calendar", label: "Calendario" },
   { href: "/analysis", label: "Análisis" },
   { href: "/settings", label: "Configuración" },
@@ -27,8 +27,11 @@ export default function Navbar() {
         </Link>
         <div className="flex items-center gap-6">
           {links.map((link) => {
-            const active =
-              pathname === link.href || pathname.startsWith(link.href + "/");
+            const isHome = link.href === "/";
+            const active = isHome
+              ? pathname === "/"
+              : pathname === link.href ||
+                pathname.startsWith(link.href + "/");
             return (
               <Link
                 key={link.href}

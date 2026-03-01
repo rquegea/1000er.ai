@@ -4,8 +4,8 @@ import { usePathname } from "next/navigation";
 import SubNav from "@/components/SubNav";
 
 const tabs = [
-  { href: "/analysis/history", label: "Historial" },
   { href: "/analysis/analytics", label: "Analytics" },
+  { href: "/analysis/history", label: "Historial" },
 ];
 
 export default function AnalysisLayout({

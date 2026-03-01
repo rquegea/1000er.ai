@@ -30,6 +30,7 @@ def _ensure_bucket(sb):
 async def upload_and_analyze(
     file: UploadFile = File(...),
     store_id: str = Form(...),
+    visit_id: str | None = Form(None),
     user: CurrentUser = Depends(get_current_user),
 ):
     """Upload a shelf image, run AI analysis, and return results."""
@@ -128,7 +129,21 @@ async def upload_and_analyze(
         ).eq("id", analysis_id).execute()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}")
 
-    # --- 7. Build response ---
+    # --- 7. Link to visit if provided ---
+    if visit_id:
+        try:
+            sb.table("visit_photos").insert({
+                "tenant_id": tenant_id,
+                "visit_id": visit_id,
+                "category": "shelf",
+                "image_url": image_url,
+                "analysis_id": analysis_id,
+                "uploaded_by": user_id,
+            }).execute()
+        except Exception:
+            pass  # Non-critical: don't fail the upload if linking fails
+
+    # --- 8. Build response ---
     return AnalysisUploadOut(
         upload=ShelfUploadOut(
             id=shelf_upload["id"],

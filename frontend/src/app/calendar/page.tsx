@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import CalendarGrid from "@/components/calendar/CalendarGrid";
+import type { ViewMode } from "@/components/calendar/CalendarGrid";
 import NewVisitForm from "@/components/calendar/NewVisitForm";
 import VisitModal from "@/components/calendar/VisitModal";
+import CompletedVisitModal from "@/components/calendar/CompletedVisitModal";
 import Spinner from "@/components/Spinner";
 import { Store, User, Visit, VisitStatus } from "@/types";
 import {
@@ -16,7 +19,7 @@ import {
   listStores,
   listUsers,
 } from "@/lib/api";
-import { addMonths, subMonths } from "date-fns";
+import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
 
 /* ── Status Legend ──────────────────────────────────────── */
 
@@ -30,7 +33,9 @@ const legend = [
 /* ── Page Component ────────────────────────────────────── */
 
 export default function CalendarPage() {
+  const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [visits, setVisits] = useState<Visit[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -39,8 +44,10 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [newVisitDate, setNewVisitDate] = useState<Date | null>(null);
+  const [editingVisit, setEditingVisit] = useState<Visit | null>(null);
 
   const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+  const chainMap = new Map(stores.map((s) => [s.id, s.chain || ""]));
   const userMap = new Map(users.map((u) => [u.id, [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email]));
 
   const fetchData = useCallback(async () => {
@@ -64,15 +71,34 @@ export default function CalendarPage() {
     fetchData();
   }, [fetchData]);
 
-  const handlePreviousMonth = () => setCurrentDate((d) => subMonths(d, 1));
-  const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
+  /* ── Navigation adapted per view mode ─────────────────── */
+  const handlePrevious = () => {
+    setCurrentDate((d) => {
+      if (viewMode === "month") return subMonths(d, 1);
+      if (viewMode === "week") return subWeeks(d, 1);
+      return subDays(d, 1);
+    });
+  };
+
+  const handleNext = () => {
+    setCurrentDate((d) => {
+      if (viewMode === "month") return addMonths(d, 1);
+      if (viewMode === "week") return addWeeks(d, 1);
+      return addDays(d, 1);
+    });
+  };
 
   const handleDayClick = (date: Date) => {
-    setNewVisitDate(date);
+    setCurrentDate(date);
   };
 
   const handleVisitClick = (visit: Visit) => {
     setSelectedVisit(visit);
+  };
+
+  const handleStartVisit = (visitId: string) => {
+    setSelectedVisit(null);
+    router.push(`/visits/${visitId}/active`);
   };
 
   const handleUpdateStatus = async (visitId: string, status: VisitStatus) => {
@@ -104,6 +130,26 @@ export default function CalendarPage() {
       setError(err instanceof Error ? err.message : "Error al eliminar");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleEditVisit = (visit: Visit) => {
+    setSelectedVisit(null);
+    setEditingVisit(visit);
+  };
+
+  const handleEditSubmit = async (data: { storeId: string; userId?: string; scheduledAt: string; notes: string }) => {
+    if (!editingVisit) return;
+    try {
+      await updateVisit(editingVisit.id, {
+        store_id: data.storeId,
+        scheduled_at: data.scheduledAt,
+        notes: data.notes || undefined,
+      });
+      setEditingVisit(null);
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al editar visita");
     }
   };
 
@@ -186,20 +232,36 @@ export default function CalendarPage() {
         currentDate={currentDate}
         visits={visits}
         stores={stores}
-        onPreviousMonth={handlePreviousMonth}
-        onNextMonth={handleNextMonth}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
         onDayClick={handleDayClick}
         onVisitClick={handleVisitClick}
       />
 
-      {/* Visit Detail Modal */}
-      {selectedVisit && (
-        <VisitModal
+      {/* Visit Detail Modal — show rich summary for completed visits */}
+      {selectedVisit && selectedVisit.status === "completed" && (
+        <CompletedVisitModal
           visit={selectedVisit}
           storeName={storeMap.get(selectedVisit.store_id) || "—"}
           userName={userMap.get(selectedVisit.user_id) || "—"}
           onClose={() => setSelectedVisit(null)}
+          onReschedule={(id) => handleUpdateStatus(id, "scheduled")}
+          onDelete={handleDeleteVisit}
+          loading={actionLoading}
+        />
+      )}
+      {selectedVisit && selectedVisit.status !== "completed" && (
+        <VisitModal
+          visit={selectedVisit}
+          storeName={storeMap.get(selectedVisit.store_id) || "—"}
+          storeChain={chainMap.get(selectedVisit.store_id) || ""}
+          userName={userMap.get(selectedVisit.user_id) || "—"}
+          onClose={() => setSelectedVisit(null)}
           onUpdateStatus={handleUpdateStatus}
+          onStartVisit={handleStartVisit}
+          onEdit={handleEditVisit}
           onDelete={handleDeleteVisit}
           loading={actionLoading}
         />
@@ -213,6 +275,18 @@ export default function CalendarPage() {
           initialDate={newVisitDate}
           onSubmit={handleCreateVisit}
           onClose={() => setNewVisitDate(null)}
+        />
+      )}
+
+      {/* Edit Visit Modal */}
+      {editingVisit && (
+        <NewVisitForm
+          stores={stores}
+          users={users}
+          initialDate={editingVisit.scheduled_at ? new Date(editingVisit.scheduled_at) : new Date()}
+          visit={editingVisit}
+          onSubmit={handleEditSubmit}
+          onClose={() => setEditingVisit(null)}
         />
       )}
     </div>

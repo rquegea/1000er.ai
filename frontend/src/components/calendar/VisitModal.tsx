@@ -4,6 +4,7 @@ import { Visit, VisitStatus } from "@/types";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useEffect, useRef } from "react";
+import ChainLogo from "@/components/ChainLogo";
 
 const statusConfig: Record<VisitStatus, { label: string; color: string; bgColor: string }> = {
   scheduled:   { label: "Programada",  color: "#007aff", bgColor: "rgba(0,122,255,0.1)" },
@@ -16,14 +17,17 @@ const statusConfig: Record<VisitStatus, { label: string; color: string; bgColor:
 interface VisitModalProps {
   visit: Visit;
   storeName: string;
+  storeChain?: string;
   userName: string;
   onClose: () => void;
   onUpdateStatus: (visitId: string, status: VisitStatus) => void;
+  onStartVisit: (visitId: string) => void;
+  onEdit: (visit: Visit) => void;
   onDelete: (visitId: string) => void;
   loading?: boolean;
 }
 
-export default function VisitModal({ visit, storeName, userName, onClose, onUpdateStatus, onDelete, loading }: VisitModalProps) {
+export default function VisitModal({ visit, storeName, storeChain, userName, onClose, onUpdateStatus, onStartVisit, onEdit, onDelete, loading }: VisitModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const config = statusConfig[visit.status];
 
@@ -57,7 +61,8 @@ export default function VisitModal({ visit, storeName, userName, onClose, onUpda
               />
               {config.label}
             </div>
-            <h3 className="text-[17px] font-semibold text-[#1d1d1f]">
+            <h3 className="flex items-center gap-2 text-[17px] font-semibold text-[#1d1d1f]">
+              {storeChain && <ChainLogo chain={storeChain} size={22} className="rounded-md" />}
               {storeName}
             </h3>
           </div>
@@ -163,10 +168,18 @@ export default function VisitModal({ visit, storeName, userName, onClose, onUpda
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => onUpdateStatus(visit.id, "in_progress")}
+                  onClick={() => onStartVisit(visit.id)}
                   className="flex-1 rounded-full bg-[#007aff] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#0066cc] active:scale-[0.98] disabled:opacity-50"
                 >
                   Iniciar visita
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onEdit(visit)}
+                  className="rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
+                >
+                  Editar
                 </button>
                 <button
                   type="button"
@@ -179,24 +192,44 @@ export default function VisitModal({ visit, storeName, userName, onClose, onUpda
               </>
             )}
             {visit.status === "in_progress" && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => onUpdateStatus(visit.id, "completed")}
-                className="flex-1 rounded-full bg-[#34c759] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#2db84e] active:scale-[0.98] disabled:opacity-50"
-              >
-                Completar visita
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onStartVisit(visit.id)}
+                  className="flex-1 rounded-full bg-[#ff9500] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#e08600] active:scale-[0.98] disabled:opacity-50"
+                >
+                  Continuar visita
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onEdit(visit)}
+                  className="rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
+                >
+                  Editar
+                </button>
+              </>
             )}
             {(visit.status === "completed" || visit.status === "cancelled" || visit.status === "missed") && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => onUpdateStatus(visit.id, "scheduled")}
-                className="flex-1 rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
-              >
-                Reprogramar
-              </button>
+              <div className="flex w-full gap-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onUpdateStatus(visit.id, "scheduled")}
+                  className="flex-1 rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
+                >
+                  Reprogramar
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onEdit(visit)}
+                  className="rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
+                >
+                  Editar
+                </button>
+              </div>
             )}
           </div>
           <button

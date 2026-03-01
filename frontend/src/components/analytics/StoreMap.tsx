@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
+import type { MapRef } from "react-map-gl/mapbox";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { useRef, useState } from "react";
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 interface Store {
   id: string;
@@ -23,35 +28,16 @@ function getMarkerColor(store: Store): string {
 }
 
 export default function StoreMap({ stores }: StoreMapProps) {
-  const [MapComponents, setMapComponents] = useState<{
-    MapContainer: typeof import("react-leaflet").MapContainer;
-    TileLayer: typeof import("react-leaflet").TileLayer;
-    CircleMarker: typeof import("react-leaflet").CircleMarker;
-    Popup: typeof import("react-leaflet").Popup;
-  } | null>(null);
+  const mapRef = useRef<MapRef>(null);
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null);
 
-  useEffect(() => {
-    // @ts-expect-error -- CSS module imported at runtime for SSR safety
-    import("leaflet/dist/leaflet.css");
-    import("react-leaflet").then((mod) => {
-      setMapComponents({
-        MapContainer: mod.MapContainer,
-        TileLayer: mod.TileLayer,
-        CircleMarker: mod.CircleMarker,
-        Popup: mod.Popup,
-      });
-    });
-  }, []);
-
-  if (!MapComponents) {
+  if (!MAPBOX_TOKEN) {
     return (
       <div className="flex h-[400px] items-center justify-center rounded-2xl bg-[#fafafa]">
-        <p className="text-[13px] text-[#86868b]">Cargando mapa...</p>
+        <p className="text-[13px] text-[#86868b]">Token de Mapbox no configurado</p>
       </div>
     );
   }
-
-  const { MapContainer, TileLayer, CircleMarker, Popup } = MapComponents;
 
   return (
     <div className="animate-fade-in">
@@ -59,69 +45,90 @@ export default function StoreMap({ stores }: StoreMapProps) {
         Mapa de tiendas
       </p>
       <div className="mt-4 overflow-hidden rounded-2xl border border-[#e5e5ea]">
-        <MapContainer
-          center={[40.4168, -3.7038]}
-          zoom={12}
-          style={{ height: 400, width: "100%" }}
-          scrollWheelZoom={false}
+        <Map
+          ref={mapRef}
+          initialViewState={{
+            latitude: 40.4168,
+            longitude: -3.7038,
+            zoom: 12,
+          }}
+          style={{ width: "100%", height: 400 }}
+          mapStyle="mapbox://styles/mapbox/light-v11"
+          mapboxAccessToken={MAPBOX_TOKEN}
+          scrollZoom={false}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          />
+          <NavigationControl position="top-right" />
+
           {stores.map((store) => {
             const color = getMarkerColor(store);
             return (
-              <CircleMarker
+              <Marker
                 key={store.id}
-                center={[store.lat, store.lng]}
-                radius={10}
-                pathOptions={{
-                  fillColor: color,
-                  color: "white",
-                  weight: 2,
-                  fillOpacity: 0.9,
+                latitude={store.lat}
+                longitude={store.lng}
+                anchor="center"
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation();
+                  setSelectedStore(store);
                 }}
               >
-                <Popup>
-                  <div style={{ fontFamily: "system-ui", fontSize: 13 }}>
-                    <p style={{ fontWeight: 600, color: "#1d1d1f", margin: 0 }}>
-                      {store.name}
-                    </p>
-                    <p style={{ color: "#86868b", margin: "2px 0 8px", fontSize: 12 }}>
-                      {store.chain}
-                    </p>
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <div>
-                        <p style={{ fontSize: 11, color: "#86868b", margin: 0 }}>
-                          Brand Share
-                        </p>
-                        <p style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f", margin: 0 }}>
-                          {store.brandShare}%
-                        </p>
-                      </div>
-                      <div>
-                        <p style={{ fontSize: 11, color: "#86868b", margin: 0 }}>
-                          OOS Rate
-                        </p>
-                        <p
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 600,
-                            color: store.oosRate > 5 ? "#ff3b30" : "#1d1d1f",
-                            margin: 0,
-                          }}
-                        >
-                          {store.oosRate}%
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </Popup>
-              </CircleMarker>
+                <div
+                  className="cursor-pointer rounded-full border-2 border-white shadow-md"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    backgroundColor: color,
+                  }}
+                />
+              </Marker>
             );
           })}
-        </MapContainer>
+
+          {selectedStore && (
+            <Popup
+              latitude={selectedStore.lat}
+              longitude={selectedStore.lng}
+              anchor="bottom"
+              offset={14}
+              closeOnClick={false}
+              onClose={() => setSelectedStore(null)}
+            >
+              <div style={{ fontFamily: "system-ui", fontSize: 13 }}>
+                <p style={{ fontWeight: 600, color: "#1d1d1f", margin: 0 }}>
+                  {selectedStore.name}
+                </p>
+                <p style={{ color: "#86868b", margin: "2px 0 8px", fontSize: 12 }}>
+                  {selectedStore.chain}
+                </p>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: "#86868b", margin: 0 }}>
+                      Brand Share
+                    </p>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f", margin: 0 }}>
+                      {selectedStore.brandShare}%
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, color: "#86868b", margin: 0 }}>
+                      OOS Rate
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: selectedStore.oosRate > 5 ? "#ff3b30" : "#1d1d1f",
+                        margin: 0,
+                      }}
+                    >
+                      {selectedStore.oosRate}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Popup>
+          )}
+        </Map>
       </div>
       <div className="mt-3 flex items-center gap-4">
         <div className="flex items-center gap-1.5">

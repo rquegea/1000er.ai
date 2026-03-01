@@ -28,7 +28,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/uploads");
+    router.replace("/");
   };
 
   return (

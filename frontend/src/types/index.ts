@@ -186,3 +186,43 @@ export interface StoreUpdatePayload {
   latitude?: number | null;
   longitude?: number | null;
 }
+
+// ── Visit Photos ──────────────────────────────────────────
+
+export type PhotoCategory = "shelf" | "promotion" | "activity";
+
+export interface VisitPhoto {
+  id: string;
+  tenant_id: string;
+  visit_id: string;
+  category: PhotoCategory;
+  image_url: string;
+  analysis_id: string | null;
+  uploaded_by: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface VisitPhotoListResponse {
+  data: VisitPhoto[];
+  total: number;
+}
+
+export interface OosProduct {
+  product_name: string;
+  brand: string | null;
+}
+
+export interface VisitSummary {
+  visit: Visit;
+  store_name: string;
+  store_chain: string | null;
+  store_address: string | null;
+  photos_count: Record<string, number>;
+  analyses_count: number;
+  total_products: number;
+  total_facings: number;
+  oos_count: number;
+  avg_confidence: number | null;
+  oos_products: OosProduct[];
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Store, User } from "@/types";
+import { Store, User, Visit } from "@/types";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -8,17 +8,28 @@ interface NewVisitFormProps {
   stores: Store[];
   users: User[];
   initialDate: Date;
+  visit?: Visit;
   onSubmit: (data: { storeId: string; userId?: string; scheduledAt: string; notes: string }) => void;
   onClose: () => void;
 }
 
-export default function NewVisitForm({ stores, users, initialDate, onSubmit, onClose }: NewVisitFormProps) {
+export default function NewVisitForm({ stores, users, initialDate, visit, onSubmit, onClose }: NewVisitFormProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [storeId, setStoreId] = useState("");
-  const [userId, setUserId] = useState("");
-  const [date, setDate] = useState(format(initialDate, "yyyy-MM-dd"));
-  const [time, setTime] = useState("09:00");
-  const [notes, setNotes] = useState("");
+  const isEdit = !!visit;
+
+  const [storeId, setStoreId] = useState(visit?.store_id || "");
+  const [userId, setUserId] = useState(visit?.user_id || "");
+  const [date, setDate] = useState(
+    visit?.scheduled_at
+      ? format(new Date(visit.scheduled_at), "yyyy-MM-dd")
+      : format(initialDate, "yyyy-MM-dd")
+  );
+  const [time, setTime] = useState(
+    visit?.scheduled_at
+      ? format(new Date(visit.scheduled_at), "HH:mm")
+      : "09:00"
+  );
+  const [notes, setNotes] = useState(visit?.notes || "");
   const [search, setSearch] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -65,7 +76,9 @@ export default function NewVisitForm({ stores, users, initialDate, onSubmit, onC
       <div className="animate-fade-up mx-4 w-full max-w-md rounded-2xl bg-white shadow-2xl shadow-black/10">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#f5f5f7] p-6 pb-4">
-          <h3 className="text-[17px] font-semibold text-[#1d1d1f]">Nueva visita</h3>
+          <h3 className="text-[17px] font-semibold text-[#1d1d1f]">
+            {isEdit ? "Editar visita" : "Nueva visita"}
+          </h3>
           <button
             type="button"
             onClick={onClose}
@@ -216,7 +229,7 @@ export default function NewVisitForm({ stores, users, initialDate, onSubmit, onC
               disabled={!storeId}
               className="flex-1 rounded-full bg-[#1d1d1f] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#333336] active:scale-[0.98] disabled:opacity-40"
             >
-              Crear visita
+              {isEdit ? "Guardar cambios" : "Crear visita"}
             </button>
           </div>
         </form>

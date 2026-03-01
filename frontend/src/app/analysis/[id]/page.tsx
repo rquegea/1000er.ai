@@ -39,7 +39,7 @@ export default function AnalysisDetailPage({
           {error || "Análisis no encontrado"}
         </p>
         <Link
-          href="/uploads"
+          href="/analysis"
           className="text-[15px] font-medium text-[#0066cc] hover:text-[#004499]"
         >
           Volver
@@ -72,7 +72,7 @@ export default function AnalysisDetailPage({
           </p>
         </div>
         <Link
-          href="/uploads"
+          href="/analysis"
           className="inline-flex shrink-0 rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"
         >
           Nuevo análisis

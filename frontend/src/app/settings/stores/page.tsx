@@ -6,6 +6,7 @@ import { listStores, createStore, updateStore, deleteStore, getMe } from "@/lib/
 import type { Store, StoreCreatePayload, StoreUpdatePayload } from "@/types";
 import Spinner from "@/components/Spinner";
 import CreatableSelect from "@/components/CreatableSelect";
+import ChainLogo from "@/components/ChainLogo";
 
 const LocationPicker = dynamic(() => import("@/components/LocationPicker"), {
   ssr: false,
@@ -290,7 +291,16 @@ export default function SettingsStoresPage() {
                     {s.name}
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#86868b]">
-                    {s.chain || "—"}
+                    <span className="flex items-center gap-2">
+                      {s.chain ? (
+                        <>
+                          <ChainLogo chain={s.chain} size={20} />
+                          {s.chain}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#86868b]">
                     {s.address || "—"}
@@ -370,6 +380,7 @@ export default function SettingsStoresPage() {
                   onChange={(v) => set("chain", v)}
                   options={chainOptions}
                   placeholder="Selecciona o crea una cadena"
+                  renderPrefix={(val) => <ChainLogo chain={val} size={20} />}
                 />
               </div>
 
