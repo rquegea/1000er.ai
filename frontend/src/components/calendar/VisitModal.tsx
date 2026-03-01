@@ -15,11 +15,14 @@ const statusConfig: Record<VisitStatus, { label: string; color: string; bgColor:
 
 interface VisitModalProps {
   visit: Visit;
+  storeName: string;
   onClose: () => void;
   onUpdateStatus: (visitId: string, status: VisitStatus) => void;
+  onDelete: (visitId: string) => void;
+  loading?: boolean;
 }
 
-export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModalProps) {
+export default function VisitModal({ visit, storeName, onClose, onUpdateStatus, onDelete, loading }: VisitModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const config = statusConfig[visit.status];
 
@@ -30,6 +33,8 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onClose]);
+
+  const scheduledDate = visit.scheduled_at ? new Date(visit.scheduled_at) : null;
 
   return (
     <div
@@ -52,10 +57,11 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
               {config.label}
             </div>
             <h3 className="text-[17px] font-semibold text-[#1d1d1f]">
-              {visit.storeName}
+              {storeName}
             </h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="ml-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#86868b] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
           >
@@ -67,37 +73,41 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
 
         {/* Body */}
         <div className="space-y-4 p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="2" width="14" height="13" rx="2" stroke="#86868b" strokeWidth="1.2" />
-                <path d="M1 6H15" stroke="#86868b" strokeWidth="1.2" />
-                <path d="M5 1V3" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" />
-                <path d="M11 1V3" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">Fecha</p>
-              <p className="text-[14px] text-[#1d1d1f]">
-                {format(new Date(visit.scheduledAt), "EEEE d 'de' MMMM, yyyy", { locale: es })}
-              </p>
-            </div>
-          </div>
+          {scheduledDate && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <rect x="1" y="2" width="14" height="13" rx="2" stroke="#86868b" strokeWidth="1.2" />
+                    <path d="M1 6H15" stroke="#86868b" strokeWidth="1.2" />
+                    <path d="M5 1V3" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" />
+                    <path d="M11 1V3" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">Fecha</p>
+                  <p className="text-[14px] text-[#1d1d1f]">
+                    {format(scheduledDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}
+                  </p>
+                </div>
+              </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="7" stroke="#86868b" strokeWidth="1.2" />
-                <path d="M8 4V8L10.5 10.5" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">Hora</p>
-              <p className="text-[14px] text-[#1d1d1f]">
-                {format(new Date(visit.scheduledAt), "HH:mm")} h
-              </p>
-            </div>
-          </div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="7" stroke="#86868b" strokeWidth="1.2" />
+                    <path d="M8 4V8L10.5 10.5" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">Hora</p>
+                  <p className="text-[14px] text-[#1d1d1f]">
+                    {format(scheduledDate, "HH:mm")} h
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
 
           {visit.notes && (
             <div className="flex items-start gap-3">
@@ -112,6 +122,21 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
               </div>
             </div>
           )}
+
+          {visit.duration_minutes != null && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5f5f7]">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="7" stroke="#86868b" strokeWidth="1.2" />
+                  <path d="M8 4V8L10.5 10.5" stroke="#86868b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-[#86868b]">Duración</p>
+                <p className="text-[14px] text-[#1d1d1f]">{visit.duration_minutes} min</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -120,14 +145,18 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
             {visit.status === "scheduled" && (
               <>
                 <button
+                  type="button"
+                  disabled={loading}
                   onClick={() => onUpdateStatus(visit.id, "in_progress")}
-                  className="flex-1 rounded-full bg-[#007aff] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#0066cc] active:scale-[0.98]"
+                  className="flex-1 rounded-full bg-[#007aff] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#0066cc] active:scale-[0.98] disabled:opacity-50"
                 >
                   Iniciar visita
                 </button>
                 <button
+                  type="button"
+                  disabled={loading}
                   onClick={() => onUpdateStatus(visit.id, "cancelled")}
-                  className="rounded-full px-4 py-2.5 text-[13px] font-medium text-[#ff3b30] transition-all duration-200 hover:bg-[#ff3b30]/10 active:scale-[0.98]"
+                  className="rounded-full px-4 py-2.5 text-[13px] font-medium text-[#ff3b30] transition-all duration-200 hover:bg-[#ff3b30]/10 active:scale-[0.98] disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -135,21 +164,33 @@ export default function VisitModal({ visit, onClose, onUpdateStatus }: VisitModa
             )}
             {visit.status === "in_progress" && (
               <button
+                type="button"
+                disabled={loading}
                 onClick={() => onUpdateStatus(visit.id, "completed")}
-                className="flex-1 rounded-full bg-[#34c759] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#2db84e] active:scale-[0.98]"
+                className="flex-1 rounded-full bg-[#34c759] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#2db84e] active:scale-[0.98] disabled:opacity-50"
               >
                 Completar visita
               </button>
             )}
             {(visit.status === "completed" || visit.status === "cancelled" || visit.status === "missed") && (
               <button
+                type="button"
+                disabled={loading}
                 onClick={() => onUpdateStatus(visit.id, "scheduled")}
-                className="flex-1 rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98]"
+                className="flex-1 rounded-full bg-[#f5f5f7] px-4 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-200 hover:bg-[#e5e5ea] active:scale-[0.98] disabled:opacity-50"
               >
                 Reprogramar
               </button>
             )}
           </div>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => onDelete(visit.id)}
+            className="mt-2 w-full rounded-full px-4 py-2 text-[12px] font-medium text-[#ff3b30] transition-colors hover:bg-[#ff3b30]/10 disabled:opacity-50"
+          >
+            Eliminar visita
+          </button>
         </div>
       </div>
     </div>

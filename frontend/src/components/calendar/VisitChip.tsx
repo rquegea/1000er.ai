@@ -13,25 +13,34 @@ const statusColors: Record<string, { bg: string; text: string; dot: string }> = 
 
 interface VisitChipProps {
   visit: Visit;
+  storeName: string;
   onClick?: (visit: Visit) => void;
 }
 
-export default function VisitChip({ visit, onClick }: VisitChipProps) {
+export default function VisitChip({ visit, storeName, onClick }: VisitChipProps) {
   const colors = statusColors[visit.status] || statusColors.scheduled;
-  const time = format(new Date(visit.scheduledAt), "HH:mm");
+  const time = visit.scheduled_at ? format(new Date(visit.scheduled_at), "HH:mm") : "--:--";
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.(visit);
       }}
-      className={`group flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-all duration-200 hover:scale-[1.02] ${colors.bg}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.stopPropagation();
+          onClick?.(visit);
+        }
+      }}
+      className={`group flex w-full cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-all duration-200 hover:scale-[1.02] ${colors.bg}`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`} />
       <span className={`truncate text-[11px] font-medium ${colors.text}`}>
-        {time} {visit.storeName}
+        {time} {storeName}
       </span>
-    </button>
+    </div>
   );
 }

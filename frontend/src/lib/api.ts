@@ -10,6 +10,10 @@ import type {
   StoreListResponse,
   StoreCreatePayload,
   StoreUpdatePayload,
+  Visit,
+  VisitListResponse,
+  VisitCreatePayload,
+  VisitUpdatePayload,
 } from "@/types";
 import supabase from "@/lib/supabase";
 
@@ -197,6 +201,82 @@ export async function deleteStore(storeId: string): Promise<void> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Failed to delete store" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+}
+
+// ── Visits ────────────────────────────────────────────────
+
+export async function listVisits(
+  limit = 100,
+  offset = 0
+): Promise<VisitListResponse> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/?limit=${limit}&offset=${offset}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch visits (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function createVisit(payload: VisitCreatePayload): Promise<Visit> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create visit" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateVisit(
+  visitId: string,
+  payload: VisitUpdatePayload
+): Promise<Visit> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update visit" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function startVisit(visitId: string): Promise<Visit> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}/start`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to start visit" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function endVisit(visitId: string): Promise<Visit> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}/end`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to end visit" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteVisit(visitId: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to delete visit" }));
     throw new Error(err.detail || `Error ${res.status}`);
   }
 }

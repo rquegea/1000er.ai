@@ -1,8 +1,7 @@
 "use client";
 
-import { Visit } from "@/types";
+import { Store, Visit } from "@/types";
 import {
-  addMonths,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -12,7 +11,6 @@ import {
   isToday,
   startOfMonth,
   startOfWeek,
-  subMonths,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import VisitChip from "./VisitChip";
@@ -22,6 +20,7 @@ const weekDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 interface CalendarGridProps {
   currentDate: Date;
   visits: Visit[];
+  stores: Store[];
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onDayClick: (date: Date) => void;
@@ -31,6 +30,7 @@ interface CalendarGridProps {
 export default function CalendarGrid({
   currentDate,
   visits,
+  stores,
   onPreviousMonth,
   onNextMonth,
   onDayClick,
@@ -42,16 +42,19 @@ export default function CalendarGrid({
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
+  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+
   const getVisitsForDay = (day: Date) =>
     visits
-      .filter((v) => isSameDay(new Date(v.scheduledAt), day))
-      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+      .filter((v) => v.scheduled_at && isSameDay(new Date(v.scheduled_at), day))
+      .sort((a, b) => (a.scheduled_at || "").localeCompare(b.scheduled_at || ""));
 
   return (
     <div className="animate-fade-in">
       {/* Month Navigation */}
       <div className="mb-8 flex items-center justify-between">
         <button
+          type="button"
           onClick={onPreviousMonth}
           className="flex h-9 w-9 items-center justify-center rounded-full text-[#86868b] transition-all duration-200 hover:bg-[#f5f5f7] hover:text-[#1d1d1f] active:scale-95"
         >
@@ -63,6 +66,7 @@ export default function CalendarGrid({
           {format(currentDate, "MMMM yyyy", { locale: es })}
         </h2>
         <button
+          type="button"
           onClick={onNextMonth}
           className="flex h-9 w-9 items-center justify-center rounded-full text-[#86868b] transition-all duration-200 hover:bg-[#f5f5f7] hover:text-[#1d1d1f] active:scale-95"
         >
@@ -92,10 +96,10 @@ export default function CalendarGrid({
           const today = isToday(day);
 
           return (
-            <button
+            <div
               key={day.toISOString()}
               onClick={() => onDayClick(day)}
-              className={`group relative flex min-h-[100px] flex-col bg-white p-2 text-left transition-colors duration-150 hover:bg-[#fafafa] sm:min-h-[120px] ${
+              className={`group relative flex min-h-[100px] cursor-pointer flex-col bg-white p-2 text-left transition-colors duration-150 hover:bg-[#fafafa] sm:min-h-[120px] ${
                 !inMonth ? "opacity-40" : ""
               }`}
             >
@@ -113,7 +117,12 @@ export default function CalendarGrid({
               {/* Visit chips */}
               <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
                 {dayVisits.slice(0, 3).map((visit) => (
-                  <VisitChip key={visit.id} visit={visit} onClick={onVisitClick} />
+                  <VisitChip
+                    key={visit.id}
+                    visit={visit}
+                    storeName={storeMap.get(visit.store_id) || "—"}
+                    onClick={onVisitClick}
+                  />
                 ))}
                 {dayVisits.length > 3 && (
                   <span className="mt-0.5 text-[10px] font-medium text-[#86868b]">
@@ -121,7 +130,7 @@ export default function CalendarGrid({
                   </span>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

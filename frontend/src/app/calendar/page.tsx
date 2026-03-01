@@ -1,35 +1,21 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import CalendarGrid from "@/components/calendar/CalendarGrid";
 import NewVisitForm from "@/components/calendar/NewVisitForm";
 import VisitModal from "@/components/calendar/VisitModal";
+import Spinner from "@/components/Spinner";
 import { Store, Visit, VisitStatus } from "@/types";
+import {
+  listVisits,
+  createVisit,
+  startVisit,
+  endVisit,
+  updateVisit,
+  deleteVisit,
+  listStores,
+} from "@/lib/api";
 import { addMonths, subMonths } from "date-fns";
-import { useState } from "react";
-
-/* ── Mock Data ─────────────────────────────────────────── */
-
-const mockStores = [
-  { id: "1", name: "Mercadona Sanchinarro", chain: "Mercadona", address: "C/ Sanchinarro 12" },
-  { id: "2", name: "Carrefour Arturo Soria", chain: "Carrefour", address: "Av. Arturo Soria 56" },
-  { id: "3", name: "Mercadona Pintor Gris", chain: "Mercadona", address: "C/ Pintor Gris 8" },
-  { id: "4", name: "Lidl Gran Vía", chain: "Lidl", address: "Gran Vía 32" },
-  { id: "5", name: "Dia Las Tablas", chain: "Dia", address: "Av. Las Tablas 14" },
-] as Store[];
-
-const initialVisits: Visit[] = [
-  { id: "1", storeId: "1", storeName: "Mercadona Sanchinarro", scheduledAt: "2026-03-05T09:00:00", status: "completed", notes: "Revisar lineal de cereales" },
-  { id: "2", storeId: "2", storeName: "Carrefour Arturo Soria", scheduledAt: "2026-03-05T11:30:00", status: "scheduled" },
-  { id: "3", storeId: "3", storeName: "Mercadona Pintor Gris", scheduledAt: "2026-03-07T10:00:00", status: "scheduled" },
-  { id: "4", storeId: "4", storeName: "Lidl Gran Vía", scheduledAt: "2026-03-10T09:30:00", status: "scheduled" },
-  { id: "5", storeId: "1", storeName: "Mercadona Sanchinarro", scheduledAt: "2026-03-12T14:00:00", status: "in_progress" },
-  { id: "6", storeId: "5", storeName: "Dia Las Tablas", scheduledAt: "2026-03-15T08:30:00", status: "scheduled" },
-  { id: "7", storeId: "2", storeName: "Carrefour Arturo Soria", scheduledAt: "2026-03-18T10:00:00", status: "cancelled", notes: "Tienda cerrada por reformas" },
-  { id: "8", storeId: "3", storeName: "Mercadona Pintor Gris", scheduledAt: "2026-03-20T11:00:00", status: "missed" },
-  { id: "9", storeId: "4", storeName: "Lidl Gran Vía", scheduledAt: "2026-03-22T09:00:00", status: "scheduled" },
-  { id: "10", storeId: "1", storeName: "Mercadona Sanchinarro", scheduledAt: "2026-03-25T16:00:00", status: "scheduled" },
-  { id: "11", storeId: "5", storeName: "Dia Las Tablas", scheduledAt: "2026-03-28T10:30:00", status: "scheduled" },
-];
 
 /* ── Status Legend ──────────────────────────────────────── */
 
@@ -43,10 +29,35 @@ const legend = [
 /* ── Page Component ────────────────────────────────────── */
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // March 2026
-  const [visits, setVisits] = useState<Visit[]>(initialVisits);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [newVisitDate, setNewVisitDate] = useState<Date | null>(null);
+
+  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [visitsRes, storesRes] = await Promise.all([
+        listVisits(200),
+        listStores(200),
+      ]);
+      setVisits(visitsRes.data);
+      setStores(storesRes.data);
+    } catch {
+      setError("Error al cargar datos");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handlePreviousMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
@@ -59,36 +70,69 @@ export default function CalendarPage() {
     setSelectedVisit(visit);
   };
 
-  const handleUpdateStatus = (visitId: string, status: VisitStatus) => {
-    setVisits((prev) =>
-      prev.map((v) => (v.id === visitId ? { ...v, status } : v))
-    );
-    setSelectedVisit(null);
+  const handleUpdateStatus = async (visitId: string, status: VisitStatus) => {
+    setActionLoading(true);
+    try {
+      if (status === "in_progress") {
+        await startVisit(visitId);
+      } else if (status === "completed") {
+        await endVisit(visitId);
+      } else {
+        await updateVisit(visitId, { status });
+      }
+      setSelectedVisit(null);
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al actualizar");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleCreateVisit = (data: { storeId: string; scheduledAt: string; notes: string }) => {
-    const store = mockStores.find((s) => s.id === data.storeId);
-    if (!store) return;
-    const newVisit: Visit = {
-      id: crypto.randomUUID(),
-      storeId: data.storeId,
-      storeName: store.name,
-      scheduledAt: data.scheduledAt,
-      status: "scheduled",
-      notes: data.notes || undefined,
-    };
-    setVisits((prev) => [...prev, newVisit]);
-    setNewVisitDate(null);
+  const handleDeleteVisit = async (visitId: string) => {
+    setActionLoading(true);
+    try {
+      await deleteVisit(visitId);
+      setSelectedVisit(null);
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  // Stats
+  const handleCreateVisit = async (data: { storeId: string; scheduledAt: string; notes: string }) => {
+    try {
+      await createVisit({
+        store_id: data.storeId,
+        scheduled_at: data.scheduledAt,
+        notes: data.notes || undefined,
+      });
+      setNewVisitDate(null);
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear visita");
+    }
+  };
+
+  // Stats for current month
   const monthVisits = visits.filter((v) => {
-    const d = new Date(v.scheduledAt);
+    if (!v.scheduled_at) return false;
+    const d = new Date(v.scheduled_at);
     return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
   });
   const completedCount = monthVisits.filter((v) => v.status === "completed").length;
   const scheduledCount = monthVisits.filter((v) => v.status === "scheduled").length;
   const totalCount = monthVisits.length;
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[calc(100vh-48px)] items-center justify-center pt-12">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 pb-20 pt-24">
@@ -103,6 +147,7 @@ export default function CalendarPage() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => setNewVisitDate(new Date())}
           className="inline-flex items-center gap-2 rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#333336] active:scale-[0.97]"
         >
@@ -112,6 +157,10 @@ export default function CalendarPage() {
           Nueva visita
         </button>
       </div>
+
+      {error && (
+        <p className="mb-4 text-[13px] text-[#ff3b30]">{error}</p>
+      )}
 
       {/* Legend */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
@@ -130,6 +179,7 @@ export default function CalendarPage() {
       <CalendarGrid
         currentDate={currentDate}
         visits={visits}
+        stores={stores}
         onPreviousMonth={handlePreviousMonth}
         onNextMonth={handleNextMonth}
         onDayClick={handleDayClick}
@@ -140,15 +190,18 @@ export default function CalendarPage() {
       {selectedVisit && (
         <VisitModal
           visit={selectedVisit}
+          storeName={storeMap.get(selectedVisit.store_id) || "—"}
           onClose={() => setSelectedVisit(null)}
           onUpdateStatus={handleUpdateStatus}
+          onDelete={handleDeleteVisit}
+          loading={actionLoading}
         />
       )}
 
       {/* New Visit Modal */}
       {newVisitDate && (
         <NewVisitForm
-          stores={mockStores}
+          stores={stores}
           initialDate={newVisitDate}
           onSubmit={handleCreateVisit}
           onClose={() => setNewVisitDate(null)}

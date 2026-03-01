@@ -93,11 +93,36 @@ export type VisitStatus = "scheduled" | "in_progress" | "completed" | "cancelled
 
 export interface Visit {
   id: string;
-  storeId: string;
-  storeName: string;
-  scheduledAt: string;
+  tenant_id: string;
+  store_id: string;
+  user_id: string;
+  scheduled_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_minutes: number | null;
   status: VisitStatus;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface VisitListResponse {
+  data: Visit[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface VisitCreatePayload {
+  store_id: string;
+  scheduled_at?: string;
   notes?: string;
+}
+
+export interface VisitUpdatePayload {
+  store_id?: string;
+  scheduled_at?: string;
+  notes?: string;
+  status?: VisitStatus;
 }
 
 export interface Store {
