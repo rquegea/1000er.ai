@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     roboflow_model_url: str = "https://infer.roboflow.com/grounding_dino/infer"
     detection_text_prompt: str = "product . bottle . box . can . package . bag . carton . food"
     detection_confidence_threshold: float = 0.15
-    detection_nms_iou_threshold: float = 0.35
+    detection_nms_iou_threshold: float = 0.45
     mosaic_cell_size: int = 150
     mosaic_columns: int = 8
     mosaic_padding: int = 4
