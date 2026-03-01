@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Session, User } from "@supabase/supabase-js";
-import supabase from "@/lib/supabase";
+import { createBrowserClient } from "@/lib/supabase";
 
 interface AuthContextType {
   session: Session | null;
@@ -38,16 +38,14 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Use onAuthStateChange as the single source of truth.
-    // It fires INITIAL_SESSION first, then SIGNED_IN / SIGNED_OUT.
+    const supabase = createBrowserClient();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setLoading(false);
 
-      // Only redirect on explicit user-initiated sign-out,
-      // never on INITIAL_SESSION with null session.
       if (event === "SIGNED_OUT") {
         router.replace("/login");
       }
@@ -67,6 +65,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, loading, pathname, router]);
 
   const signOut = async () => {
+    const supabase = createBrowserClient();
     await supabase.auth.signOut();
   };
 

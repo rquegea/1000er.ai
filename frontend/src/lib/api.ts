@@ -15,7 +15,7 @@ import type {
   VisitCreatePayload,
   VisitUpdatePayload,
 } from "@/types";
-import supabase from "@/lib/supabase";
+import { createBrowserClient } from "@/lib/supabase";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -23,6 +23,7 @@ async function authFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  const supabase = createBrowserClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

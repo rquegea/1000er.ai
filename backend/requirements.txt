@@ -6,6 +6,7 @@ pydantic
 pydantic-settings
 python-dotenv
 PyJWT
+cryptography
 alembic
 sqlalchemy
 google-genai
