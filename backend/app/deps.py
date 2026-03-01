@@ -50,3 +50,22 @@ async def get_current_user(
         )
 
     return CurrentUser(tenant_id=tenant_id, user_id=user_id)
+
+
+async def require_admin(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    sb = get_supabase_client()
+    row = (
+        sb.table("users")
+        .select("role")
+        .eq("id", user.user_id)
+        .eq("tenant_id", user.tenant_id)
+        .execute()
+    )
+    if not row.data or row.data[0]["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return user

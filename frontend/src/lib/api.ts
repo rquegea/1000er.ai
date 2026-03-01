@@ -2,9 +2,32 @@ import type {
   AnalysisUploadResponse,
   Analysis,
   AnalysisListResponse,
+  User,
+  UserListResponse,
+  UserCreatePayload,
+  UserUpdatePayload,
 } from "@/types";
+import supabase from "@/lib/supabase";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+async function authFetch(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const headers = new Headers(options.headers);
+  if (session?.access_token) {
+    headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
+// ── Analyses ──────────────────────────────────────────────
 
 export async function uploadAndAnalyze(
   file: File
@@ -12,7 +35,7 @@ export async function uploadAndAnalyze(
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_URL}/api/v1/analyses/upload`, {
+  const res = await authFetch(`${API_URL}/api/v1/analyses/upload`, {
     method: "POST",
     body: formData,
   });
@@ -26,7 +49,7 @@ export async function uploadAndAnalyze(
 }
 
 export async function getAnalysis(id: string): Promise<Analysis> {
-  const res = await fetch(`${API_URL}/api/v1/analyses/${id}`);
+  const res = await authFetch(`${API_URL}/api/v1/analyses/${id}`);
 
   if (!res.ok) {
     throw new Error(`Analysis not found (${res.status})`);
@@ -39,7 +62,7 @@ export async function listAnalyses(
   limit = 20,
   offset = 0
 ): Promise<AnalysisListResponse> {
-  const res = await fetch(
+  const res = await authFetch(
     `${API_URL}/api/v1/analyses/?limit=${limit}&offset=${offset}`
   );
 
@@ -48,4 +71,66 @@ export async function listAnalyses(
   }
 
   return res.json();
+}
+
+// ── Users ─────────────────────────────────────────────────
+
+export async function getMe(): Promise<User> {
+  const res = await authFetch(`${API_URL}/api/v1/users/me`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch current user (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function listUsers(
+  limit = 50,
+  offset = 0
+): Promise<UserListResponse> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/users/?limit=${limit}&offset=${offset}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch users (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function createUser(payload: UserCreatePayload): Promise<User> {
+  const res = await authFetch(`${API_URL}/api/v1/users/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create user" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateUser(
+  userId: string,
+  payload: UserUpdatePayload
+): Promise<User> {
+  const res = await authFetch(`${API_URL}/api/v1/users/${userId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update user" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/users/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to delete user" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
 }

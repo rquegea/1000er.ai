@@ -48,6 +48,47 @@ export interface AnalysisListResponse {
   offset: number;
 }
 
+// ── Users ──────────────────────────────────────────────────
+
+export type UserRole = "admin" | "key_account" | "gpv";
+
+export interface User {
+  id: string;
+  tenant_id: string;
+  email: string;
+  role: UserRole;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  created_at: string;
+}
+
+export interface UserListResponse {
+  data: User[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface UserCreatePayload {
+  email: string;
+  password: string;
+  role: UserRole;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+}
+
+export interface UserUpdatePayload {
+  email?: string;
+  role?: UserRole;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+}
+
+// ── Visits ─────────────────────────────────────────────────
+
 export type VisitStatus = "scheduled" | "in_progress" | "completed" | "cancelled" | "missed";
 
 export interface Visit {

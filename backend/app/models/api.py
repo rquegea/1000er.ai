@@ -1,7 +1,45 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from app.models.vision import DetectedProduct, AnalysisSummary
+
+
+# ── Users ──────────────────────────────────────────────────
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    role: str = "gpv"
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+
+
+class UserUpdate(BaseModel):
+    email: EmailStr | None = None
+    role: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+
+
+class UserOut(BaseModel):
+    id: str
+    tenant_id: str
+    email: str
+    role: str
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    created_at: str
+
+
+class UserListOut(BaseModel):
+    data: list[UserOut]
+    total: int
+    limit: int
+    offset: int
 
 
 class ShelfUploadOut(BaseModel):
