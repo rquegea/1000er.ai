@@ -54,7 +54,11 @@
       "Bash(python3 -c \"\nfrom app.deps import get_supabase_client\nsb = get_supabase_client\\(\\)\n\n# Read the migration SQL\nwith open\\('../supabase/migrations/002_gpv_core.sql', 'r'\\) as f:\n    sql = f.read\\(\\)\n\n# Execute via rpc if available, otherwise try direct\nresult = sb.rpc\\('exec_sql', {'query': sql}\\).execute\\(\\)\nprint\\('Result:', result\\)\n\" 2>&1)",
       "Bash(which python3 && python3 -m pip install pytest pytest-asyncio httpx 2>&1 | tail -5)",
       "Bash(python3 -m pytest tests/ -v 2>&1)",
-      "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm test 2>&1)"
+      "Bash(cd /Users/macbook/Desktop/1000er.ai/frontend && npm test 2>&1)",
+      "Bash(npm run dev)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/analytics)",
+      "Bash(curl -s http://localhost:3000/analytics | head -100)"
     ]
   }
 }

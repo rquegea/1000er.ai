@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   PieChart,
   Pie,
@@ -19,6 +20,9 @@ export default function BrandSharePie({
   ownShare,
   competitorShare,
 }: BrandSharePieProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const data = [
     { name: "Nuestra marca", value: ownShare },
     { name: "Competidores", value: competitorShare },
@@ -31,6 +35,9 @@ export default function BrandSharePie({
       </p>
       <div className="mt-4 flex items-center gap-6">
         <div className="h-[160px] w-[160px]">
+          {!mounted ? (
+            <div className="flex h-full items-center justify-center rounded-full bg-[#fafafa]" />
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -59,6 +66,7 @@ export default function BrandSharePie({
               />
             </PieChart>
           </ResponsiveContainer>
+          )}
         </div>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">

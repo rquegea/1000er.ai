@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -23,6 +24,9 @@ interface TrendChartProps {
 }
 
 export default function TrendChart({ data, dateRange }: TrendChartProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <div className="animate-fade-in">
       <div className="flex items-end justify-between">
@@ -34,6 +38,11 @@ export default function TrendChart({ data, dateRange }: TrendChartProps) {
         )}
       </div>
       <div className="mt-4 h-[300px] w-full">
+        {!mounted ? (
+          <div className="flex h-full items-center justify-center rounded-2xl bg-[#fafafa]">
+            <p className="text-[13px] text-[#86868b]">Cargando...</p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
@@ -89,6 +98,7 @@ export default function TrendChart({ data, dateRange }: TrendChartProps) {
             />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
