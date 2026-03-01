@@ -14,3 +14,6 @@ httpx
 python-multipart
 pytest
 pytest-asyncio
+Pillow
+aiohttp
+numpy
