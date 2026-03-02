@@ -1,22 +1,15 @@
-"""Shelf image analysis — V2 two-phase pipeline with legacy fallback.
+"""Shelf image analysis — single-pass Gemini pipeline.
 
-V2 pipeline:
-  Phase 1: Object detection via HuggingFace (detection.py) → bounding boxes
-  Phase 2: Classification via Gemini 2.5 Flash using numbered mosaic (mosaic.py)
-
-Legacy: Single-pass Gemini analysis (original approach, used as fallback).
+Sends the original shelf photo to Gemini 2.5 Flash with a structured
+counting prompt and parses the JSON response into VisionAnalysisResult.
 """
 
-import io
 import json
 import base64
 import logging
-import time
 from typing import Any
 
 import httpx
-from PIL import Image, ImageDraw, ImageFont
-from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
@@ -26,213 +19,91 @@ from app.models.vision import (
     DetectedProduct,
     VisionAnalysisResult,
 )
-from app.services.detection import DetectionError, DetectionResult, detect_products
-from app.services.mosaic import MosaicResult, generate_mosaics
 
 logger = logging.getLogger("vision")
 
-# ── V2 Classification Prompt ───────────────────────────────────────────────
+# ── Analysis Prompt ───────────────────────────────────────────────────────
 
-V2_CLASSIFICATION_PROMPT = """You are an expert retail shelf analyst. You receive:
-1. The ORIGINAL shelf photo (full shelf view).
-2. One or more NUMBERED MOSAIC grids. Each mosaic is a grid of individually cropped product images detected by an object detector. Every crop has a visible number (#1, #2, #3, …) in its top-left corner.
+ANALYSIS_PROMPT = """You are an expert retail shelf analyst with years of experience counting product facings in supermarkets. Analyze this shelf image with maximum precision.
 
-Each crop in the mosaic represents exactly ONE facing detected on the shelf.
+CRITICAL DEFINITIONS:
+- A "facing" is ONE product unit whose FRONT FACE is visible in the FIRST ROW of the shelf (closest to the customer).
+- Products behind the first row (depth) do NOT count as facings.
 
-YOUR TASK: Identify the product in each crop and group crops that show the SAME product (same SKU, same flavor, same size).
+DEPTH vs FRONT ROW — HOW TO TELL THE DIFFERENCE:
+- If you see identical products in a line going AWAY from the camera (getting smaller/further), that is DEPTH — count only the front one.
+- Nature Valley boxes, cereal boxes, and similar products are often stacked 2-3 deep. Only count the ones at the very front edge.
+- When in doubt, count FEWER facings rather than more. It is better to undercount by 1 than overcount by 2.
+- For transparent bags (like Espelta), count only the bags whose front face is fully visible at the shelf edge.
 
-RULES:
-1. Every crop_id (from #1 to the total shown) must appear in EXACTLY ONE group. Do not skip any and do not assign one crop to multiple groups.
-2. Different flavors, sizes, or varieties of the same brand are SEPARATE products (separate groups). Example: "Coca-Cola Original 330ml" and "Coca-Cola Zero 330ml" are TWO groups.
-3. Use the ORIGINAL shelf photo for context: price labels, shelf layout, and product positioning.
-4. Do NOT count facings yourself — the object detector already did that. Just group the crops by identity.
+- Products stacked vertically in the front row DO count as separate facings.
+- Different flavors/sizes/varieties of the same brand are SEPARATE products.
 
-PRICE ASSIGNMENT:
-In Spanish supermarkets, price labels are on the shelf edge BELOW the product. Assign each price label to the product group positioned directly above it. Return the currency as ISO 4217 code (EUR, USD, GBP, etc.). Return price as a plain number WITHOUT any symbol. If no price is visible for a product, set both price and currency to null.
+YOUR TASK — Follow these steps IN ORDER:
 
-OUT OF STOCK:
-If you see an empty gap on the shelf in the original image where NO crops were detected, add an entry with crop_ids: [], is_oos: true, and describe the location in product_name (e.g. "Empty gap - shelf 2 center").
-IMPORTANT: Only report OOS if you see a clearly EMPTY shelf section with NO product at all in the original image — just bare shelf or a visible gap between products. If you see products in the original image that do NOT have corresponding numbered crops in the mosaic, do NOT mark them as OOS. The detector may have missed them. Simply ignore products that appear in the original image but are missing from the mosaic.
+STEP 1: MAP THE SHELF STRUCTURE
+Identify every horizontal shelf level visible in the image (top to bottom). Write this in your reasoning.
 
-POSITION:
-position_x and position_y represent the CENTER of the product group on the shelf (0.0 = far left/top, 1.0 = far right/bottom). Estimate from where the group's crops appear in the original image.
+STEP 2: COUNT FACINGS SHELF BY SHELF
+For EACH shelf level, scan left to right and count every individual product facing at the front edge. Write your count for each shelf in the reasoning. Be precise — count each visible front face individually.
 
-PARTIAL PRODUCTS:
-If a crop is at the edge of the image and clearly shows a product that is cut off, set is_partial: true for that group.
+STEP 3: CALCULATE TOTAL FACINGS
+Sum the facings from all shelf levels. Write the total in your reasoning. A standard supermarket shelf section typically shows between 15 and 45 total visible front-row facings. If your total exceeds 40, double-check that you are not counting depth.
 
-CONFIDENCE:
-Rate your confidence in the product identification (0.0 to 1.0). Use lower values (≤ 0.5) for blurry, dark, or hard-to-read crops.
+STEP 4: IDENTIFY PRODUCTS
+Now group the facings by product identity. For each unique product:
+- Read the product name from the packaging (full name including variant/flavor)
+- Read the brand name
+- Count how many of the facings you counted in Step 2 belong to this product
+- Note its approximate position (0.0 = left/top, 1.0 = right/bottom)
+- Read the price from the shelf label if visible
+- Detect the currency from the price label format
 
-Respond ONLY with a valid JSON object, no markdown fences, no explanation:
-{
-  "reasoning": "Your step-by-step analysis…",
-  "groups": [
-    {
-      "crop_ids": [1, 2, 3],
-      "product_name": "Full specific product name including variant",
-      "brand": "Brand name or null",
-      "price": float or null,
-      "currency": "EUR" or null,
-      "position_x": float,
-      "position_y": float,
-      "is_oos": false,
-      "is_partial": false,
-      "confidence": float
-    }
-  ]
-}"""
+STEP 5: DETECT OUT-OF-STOCK
+Look for visible empty gaps on the shelf where products should be but are missing. Each gap is an OOS entry with is_oos: true, facings: 0, and a descriptive name like "Empty gap - [location]".
 
-# ── Legacy Analysis Prompt (single-pass fallback) ─────────────────────────
-
-LEGACY_ANALYSIS_PROMPT = """You are an expert retail shelf analyst. Analyze this supermarket shelf image with maximum precision.
-
-CRITICAL DEFINITION — WHAT IS A "FACING"?
-A "facing" is STRICTLY one product unit whose FRONT FACE is visible in the FIRST ROW of the shelf — the row closest to the customer.
-
-MANDATORY DEPTH RULE:
-- ONLY count products in the very first row (the front edge of the shelf).
-- NEVER count products behind the first row. Even if you can partially see a second or third row of the same product stacked in depth, those DO NOT count.
-- Depth is IRRELEVANT. If there are 3 identical boxes one behind the other, that is 1 facing, NOT 3.
-
-VERTICAL STACKING RULE:
-- Products stacked VERTICALLY on top of each other in the front row DO count as separate facings.
-- Example: 2 boxes of the same cereal stacked on top of each other at the front edge = 2 facings.
-
-STEP-BY-STEP PROCEDURE:
-
-STEP 1: IDENTIFY SHELF LEVELS
-List every horizontal shelf level visible in the image from top to bottom (e.g., "Shelf 1 (top)", "Shelf 2", "Shelf 3 (bottom)").
-
-STEP 2: SCAN EACH SHELF LEFT TO RIGHT
-For each shelf level, scan from left to right. For each product you identify, count ONLY the units whose front face is at the very front edge of the shelf. Ignore anything behind them.
-
-STEP 3: SPATIAL GROUNDING — BUILD A COUNTING TABLE
-In the "reasoning" field you MUST build a markdown table with exactly these columns BEFORE generating the products array:
-
-| Shelf | Product | Front-row units | Notes |
-
-Rules for filling the table:
-- One row per product per shelf level. Do NOT skip any product.
-- "Front-row units": list the horizontal position of EACH unit you count (e.g., "left, center, right → 3"). You are FORBIDDEN from writing just a number — you must name each position first, then write the total.
-- "Notes": mention if you see depth behind the front row (and confirm you are ignoring it), if the product is partially cut off (is_partial), or any other observation.
-- Use the price tags / price labels on the shelf edge as visual anchors to determine where one product block ends and another begins. Price tags mark the boundaries of each product's allocated space.
-
-EXAMPLE TABLE (for illustration only — your actual table must reflect the real image):
-| Shelf | Product | Front-row units | Notes |
-|-------|---------|-----------------|-------|
-| 2 | Nature Valley Crunchy | left, center, right → 3 | 2 more boxes visible behind front row — ignored |
-| 2 | Digestive Avena | left, center-left, center, center-right → 4 | |
-| 3 | Nature Valley Crunchy | left, right → 2 | partially cut off on right edge, is_partial |
-
-After completing the table, sum facings per product across all shelves to get the final count for each entry.
-
-STEP 4: DISTINGUISH PRODUCT VARIANTS
-Different flavors, sizes, or varieties of the same brand are SEPARATE products. Each gets its own entry.
-Example: "Barritas Chocolate Leche" and "Barritas Chocolate Blanco" are TWO distinct entries, even if same brand.
-Do NOT merge them. Use the full specific product name including the variant descriptor.
-
-STEP 5: HANDLE EDGE PRODUCTS
-If a product is partially cut off at the left, right, top, or bottom edge of the image, INCLUDE it as an entry. Set is_partial: true. Count only the facings that are actually visible. Each partial product still counts as at least 1 facing.
-
-STEP 6: AGGREGATE
-- If the same product appears on multiple shelf levels, output ONE entry with facings summed across all levels.
-
-STEP 7: SELF-CHECK (mandatory — do this before writing the JSON)
-Answer these three questions in the "reasoning" field, right after the table:
-1. DUPLICATES — Does any product appear more than once in my final list? If yes → merge into one entry and sum facings.
-2. DEPTH — Did I accidentally count units behind the front row as extra facings? If yes → subtract them now.
-3. EDGE PRODUCTS — Did I include every product that is partially visible at the edges of the image with is_partial: true? If I missed any → add them.
-Only after answering all three questions, proceed to generate the JSON.
-
-SANITY CHECK:
-- A standard supermarket shelf section typically shows between 15 and 80 total visible front-row facings.
-- If your total is outside this range, re-examine your table.
-
-PERSPECTIVE CORRECTION:
-If the photo is taken at an angle (not perfectly frontal), only count products clearly in the front row at the near edge. Products appearing smaller in the background are NOT first row.
-
-IGNORE THESE — they are NOT products:
-- Price tag rails or label strips
-- Promotional signs or banners
-- Shelf dividers or plastic separators
-- Reflections in glass/mirrors
-- Products clearly fallen over (set confidence 0.3 max)
-
-PRICE ASSIGNMENT RULE:
-In Spanish supermarkets (Mercadona, Carrefour, etc.), price labels are typically on the shelf edge BELOW the product, not on the packaging. Assign each price label to the product directly above it.
-
-LOW CONFIDENCE ZONES:
-If part of the image is blurry, dark, or overexposed, still detect products but set confidence ≤ 0.5 for those zones.
+STEP 6: VERIFY YOUR WORK
+- Sum of all product facings MUST equal the total from Step 3
+- No product should appear twice (merge if same product on multiple shelves)
+- Mark products at image edges as is_partial: true
 
 RULES:
+1. NO DUPLICATES: Each unique product = exactly ONE entry. If same product on multiple shelves, sum facings into one entry.
+2. EVERY visible product gets an entry, even partially visible ones (is_partial: true).
+3. Confidence: 0.9+ if name clearly readable, 0.7-0.9 if partially readable, 0.5-0.7 if guessing from shape/color.
+4. Price: read from shelf label. Use null if not visible. Detect currency from label format (€, $, £).
+5. Position: estimate (x, y) where 0,0 = top-left corner, 1,1 = bottom-right corner of the image.
+6. LANGUAGE: Always write product names in the language shown on the packaging. Do NOT translate or mix languages. If the packaging says "Espelta Sabor Manzana", write exactly that. Do not add translations.
+7. CONSERVATIVE COUNTING: When uncertain whether a product is in the front row or behind it, do NOT count it. Accuracy matters more than completeness. Target slightly undercounting rather than overcounting.
 
-1. NO DUPLICATES: Each unique product (same SKU/reference) must appear as exactly ONE entry.
-
-2. CURRENCY DETECTION: Look at the price labels/tags on the shelf. Detect the local currency symbol or code (€, $, £, etc.). Return the currency as ISO 4217 code (EUR, USD, GBP, etc.). Return the price as a plain number WITHOUT any symbol. If no price is visible, set both price and currency to null.
-
-3. POSITION: position_x and position_y represent the CENTER of where this product is primarily located (0.0 = far left/top, 1.0 = far right/bottom). If the product spans multiple shelf levels, use the center of its largest concentration.
-
-4. OUT OF STOCK: Identify empty shelf gaps (visible shelf space with no product) as separate entries with is_oos: true. Set product_name to a description like "Empty gap - top shelf left".
-
-For EVERY unique product, return:
-- product_name: full specific product name including variant (flavor, size, type) as shown on packaging
-- brand: brand name
-- facings: TOTAL front-row-only units summed across ALL shelf levels (integer). NEVER count depth.
-- price: numeric value from shelf label, null if not visible
-- currency: ISO 4217 code detected from price labels, null if no price
-- position_x: horizontal center (0.0 = far left, 1.0 = far right)
-- position_y: vertical center (0.0 = top shelf, 1.0 = bottom shelf)
-- is_oos: true only for empty gaps, false for products
-- is_partial: true if the product is cut off at any image edge
-- confidence: your confidence in this detection from 0.0 to 1.0
-
-Respond ONLY with a valid JSON object, no markdown, no explanation:
+Respond with ONLY a JSON object (no markdown, no explanation):
 {
-  "reasoning": "string",
+  "reasoning": "Step 1: I see 3 shelf levels... Step 2: Shelf 1 (top): [product counts]... Step 3: Total = X... Step 4: Products identified... Step 5: OOS gaps... Step 6: Verification...",
   "products": [
     {
-      "product_name": "string",
-      "brand": "string",
-      "facings": integer,
-      "price": float or null,
-      "currency": "string or null",
-      "position_x": float,
-      "position_y": float,
-      "is_oos": boolean,
-      "is_partial": boolean,
-      "confidence": float
+      "product_name": "Full Product Name Including Variant",
+      "brand": "Brand Name",
+      "facings": 3,
+      "price": 1.55,
+      "currency": "EUR",
+      "position_x": 0.25,
+      "position_y": 0.15,
+      "is_oos": false,
+      "is_partial": false,
+      "confidence": 0.92
     }
   ],
   "summary": {
-    "total_products": integer,
-    "total_facings": integer,
-    "oos_count": integer,
-    "avg_confidence": float
+    "total_products": 10,
+    "total_facings": 35,
+    "oos_count": 1,
+    "avg_confidence": 0.85
   }
-}"""
+}
+
+You MUST respond with ONLY a raw JSON object. No markdown fences, no explanation, no text before or after. Just the JSON object starting with { and ending with }."""
 
 RETRY_PROMPT = """Your previous response was not valid JSON. You MUST respond with ONLY a raw JSON object. No markdown fences, no explanation, no text before or after. Just the JSON object starting with { and ending with }."""
-
-# ── V2 internal models (for parsing Gemini Phase 2 response) ──────────────
-
-
-class V2ProductGroup(BaseModel):
-    crop_ids: list[int] = Field(default_factory=list)
-    product_name: str
-    brand: str | None = None
-    price: float | None = None
-    currency: str | None = None
-    position_x: float = Field(ge=0.0, le=1.0)
-    position_y: float = Field(ge=0.0, le=1.0)
-    is_oos: bool = False
-    is_partial: bool = False
-    confidence: float = Field(ge=0.0, le=1.0)
-
-
-class V2ClassificationResponse(BaseModel):
-    reasoning: str
-    groups: list[V2ProductGroup]
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -253,307 +124,24 @@ def _parse_response(text: str) -> VisionAnalysisResult:
     return VisionAnalysisResult.model_validate_json(cleaned)
 
 
-def _parse_v2_response(text: str) -> V2ClassificationResponse:
-    """Extract JSON from Gemini V2 response and validate."""
-    cleaned = text.strip()
-    while cleaned.startswith("```"):
-        first_newline = cleaned.index("\n")
-        cleaned = cleaned[first_newline + 1 :]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[: cleaned.rfind("```")]
-    cleaned = cleaned.strip()
-    return V2ClassificationResponse.model_validate_json(cleaned)
-
-
-# ── Public API (signatures unchanged) ─────────────────────────────────────
-
-
-async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
-    """Download an image from URL and analyze it with Gemini 2.5 Flash."""
-    headers = {"User-Agent": "1000er.ai/0.1"}
-    async with httpx.AsyncClient(timeout=30, headers=headers) as http:
-        resp = await http.get(image_url)
-        resp.raise_for_status()
-        image_bytes = resp.content
-        mime_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
-
-    return await _analyze(image_bytes, mime_type)
-
-
-async def analyze_shelf_image_from_bytes(
-    image_bytes: bytes, mime_type: str = "image/jpeg"
-) -> VisionAnalysisResult:
-    """Analyze raw image bytes with Gemini 2.5 Flash."""
-    return await _analyze(image_bytes, mime_type)
-
-
-async def analyze_shelf_image_from_base64(
-    b64_data: str, mime_type: str = "image/jpeg"
-) -> VisionAnalysisResult:
-    """Analyze a base64-encoded image with Gemini 2.5 Flash."""
-    image_bytes = base64.b64decode(b64_data)
-    return await _analyze(image_bytes, mime_type)
-
-
-# ── Dispatcher ─────────────────────────────────────────────────────────────
+# ── Core analysis ─────────────────────────────────────────────────────────
 
 
 async def _analyze(
     image_bytes: bytes, mime_type: str
 ) -> VisionAnalysisResult:
-    """Core analysis: try V2 pipeline, fall back to legacy single-pass."""
-    if settings.vision_pipeline == "v2":
-        try:
-            return await _analyze_v2(image_bytes, mime_type)
-        except Exception as exc:
-            logger.warning("V2 pipeline failed, falling back to legacy: %s", exc)
-
-    return await _analyze_legacy(image_bytes, mime_type)
-
-
-# ── Debug helpers ─────────────────────────────────────────────────────────
-
-
-def _save_debug_images(
-    image_bytes: bytes,
-    detection_result: DetectionResult,
-    mosaic_result: MosaicResult,
-) -> None:
-    """Save annotated detection image and mosaic to /tmp/ for visual debugging."""
-    ts = int(time.time())
-
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    w, h = img.size
-
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
-    except OSError:
-        font = ImageFont.load_default()
-
-    for i, det in enumerate(detection_result.detections, start=1):
-        x_min = int(det.bbox[0] * w)
-        y_min = int(det.bbox[1] * h)
-        x_max = int(det.bbox[2] * w)
-        y_max = int(det.bbox[3] * h)
-
-        draw.rectangle([x_min, y_min, x_max, y_max], outline="lime", width=2)
-        label = f"#{i} {det.score:.2f}"
-        draw.text((x_min + 2, y_min + 2), label, fill="lime", font=font)
-
-    det_path = f"/tmp/debug_detection_{ts}.png"
-    img.save(det_path)
-    logger.info("Debug detection image saved: %s", det_path)
-
-    for j, mosaic_bytes in enumerate(mosaic_result.mosaic_bytes):
-        suffix = f"_{j}" if len(mosaic_result.mosaic_bytes) > 1 else ""
-        mosaic_path = f"/tmp/debug_mosaic_{ts}{suffix}.png"
-        mosaic_img = Image.open(io.BytesIO(mosaic_bytes))
-        mosaic_img.save(mosaic_path)
-        logger.info("Debug mosaic image saved: %s", mosaic_path)
-
-
-# ── V2 Pipeline ────────────────────────────────────────────────────────────
-
-
-async def _analyze_v2(
-    image_bytes: bytes, mime_type: str
-) -> VisionAnalysisResult:
-    """Two-phase pipeline: detection → mosaic → Gemini classification."""
-    # Phase 1: Object detection
-    detection_result = await detect_products(image_bytes)
-
-    if not detection_result.detections:
-        raise DetectionError("Phase 1 returned 0 detections")
-
-    logger.info(
-        "V2 Phase 1: %d detections on %dx%d image",
-        len(detection_result.detections),
-        detection_result.image_width,
-        detection_result.image_height,
-    )
-
-    # Generate mosaic(s)
-    mosaic_result = generate_mosaics(image_bytes, detection_result)
-
-    logger.info(
-        "V2 Mosaic: %d crops, %d mosaic image(s)",
-        mosaic_result.total_crops,
-        len(mosaic_result.mosaic_bytes),
-    )
-
-    # Save debug images if enabled
-    if settings.debug_detection:
-        try:
-            _save_debug_images(image_bytes, detection_result, mosaic_result)
-        except Exception as exc:
-            logger.warning("Failed to save debug images: %s", exc)
-
-    # Phase 2: Gemini classification
-    classification = await _phase2_classify(
-        image_bytes, mime_type, mosaic_result
-    )
-
-    # Post-process into VisionAnalysisResult
-    return _postprocess_v2(classification, mosaic_result)
-
-
-async def _phase2_classify(
-    image_bytes: bytes,
-    mime_type: str,
-    mosaic_result: MosaicResult,
-) -> V2ClassificationResponse:
-    """Send original image + mosaic(s) to Gemini for product classification."""
-    client = _get_client()
-
-    # Build content parts: original image + mosaic(s) + prompt
-    contents: list[Any] = [
-        types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-    ]
-    for mosaic_bytes in mosaic_result.mosaic_bytes:
-        contents.append(
-            types.Part.from_bytes(data=mosaic_bytes, mime_type="image/jpeg")
-        )
-    contents.append(V2_CLASSIFICATION_PROMPT)
-
-    config = types.GenerateContentConfig(temperature=settings.gemini_v2_temperature)
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=contents,
-        config=config,
-    )
-
-    # First parse attempt
-    try:
-        return _parse_v2_response(response.text)
-    except (json.JSONDecodeError, ValueError):
-        pass
-
-    # Retry with stricter prompt
-    contents.append(RETRY_PROMPT)
-    retry_response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=contents,
-        config=config,
-    )
-
-    try:
-        return _parse_v2_response(retry_response.text)
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise RuntimeError(
-            f"Gemini V2 returned invalid JSON after retry: "
-            f"{retry_response.text[:500]}"
-        ) from exc
-
-
-def _postprocess_v2(
-    classification: V2ClassificationResponse,
-    mosaic_result: MosaicResult,
-) -> VisionAnalysisResult:
-    """Convert V2 classification groups into VisionAnalysisResult."""
-    # Build a lookup from crop_id → CropInfo
-    crop_map = {c.crop_id: c for c in mosaic_result.crops}
-
-    products: list[DetectedProduct] = []
-    oos_count = 0
-
-    for group in classification.groups:
-        if group.is_oos:
-            oos_count += 1
-            products.append(
-                DetectedProduct(
-                    product_name=group.product_name,
-                    brand=group.brand,
-                    facings=0,
-                    price=group.price,
-                    currency=group.currency,
-                    position_x=group.position_x,
-                    position_y=group.position_y,
-                    is_oos=True,
-                    is_partial=False,
-                    confidence=group.confidence,
-                )
-            )
-            continue
-
-        # Compute position from actual crop centres (more accurate than Gemini)
-        group_crops = [crop_map[cid] for cid in group.crop_ids if cid in crop_map]
-        if group_crops:
-            pos_x = sum(c.center_x for c in group_crops) / len(group_crops)
-            pos_y = sum(c.center_y for c in group_crops) / len(group_crops)
-        else:
-            pos_x = group.position_x
-            pos_y = group.position_y
-
-        # Detect partial products (crop bbox touching image edge)
-        is_partial = group.is_partial or any(
-            c.bbox[0] < 0.02 or c.bbox[2] > 0.98
-            or c.bbox[1] < 0.02 or c.bbox[3] > 0.98
-            for c in group_crops
-        )
-
-        products.append(
-            DetectedProduct(
-                product_name=group.product_name,
-                brand=group.brand,
-                facings=len(group.crop_ids),
-                price=group.price,
-                currency=group.currency,
-                position_x=round(pos_x, 4),
-                position_y=round(pos_y, 4),
-                is_oos=False,
-                is_partial=is_partial,
-                confidence=group.confidence,
-            )
-        )
-
-    # Validate crop_id coverage
-    assigned_ids = set()
-    for g in classification.groups:
-        assigned_ids.update(g.crop_ids)
-    expected_ids = set(range(1, mosaic_result.total_crops + 1))
-    missing = expected_ids - assigned_ids
-    extra = assigned_ids - expected_ids
-    if missing:
-        logger.warning("V2 post-process: %d crop_ids not assigned: %s", len(missing), missing)
-    if extra:
-        logger.warning("V2 post-process: %d unknown crop_ids: %s", len(extra), extra)
-
-    # Build summary — total_facings ALWAYS from Phase 1
-    non_oos = [p for p in products if not p.is_oos]
-    all_confidences = [p.confidence for p in products]
-
-    summary = AnalysisSummary(
-        total_products=len(non_oos),
-        total_facings=mosaic_result.total_crops,
-        oos_count=oos_count,
-        avg_confidence=round(
-            sum(all_confidences) / len(all_confidences) if all_confidences else 0.0,
-            4,
-        ),
-    )
-
-    return VisionAnalysisResult(
-        reasoning=classification.reasoning,
-        products=products,
-        summary=summary,
-    )
-
-
-# ── Legacy Pipeline ────────────────────────────────────────────────────────
-
-
-async def _analyze_legacy(
-    image_bytes: bytes, mime_type: str
-) -> VisionAnalysisResult:
-    """Legacy single-pass analysis: send image to Gemini, parse response."""
+    """Send image to Gemini and parse the structured JSON response."""
     client = _get_client()
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
+    config = types.GenerateContentConfig(
+        temperature=settings.gemini_temperature,
+    )
+
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=[image_part, LEGACY_ANALYSIS_PROMPT],
+        contents=[image_part, ANALYSIS_PROMPT],
+        config=config,
     )
 
     # First attempt to parse
@@ -565,7 +153,8 @@ async def _analyze_legacy(
     # Retry with stricter prompt
     retry_response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=[image_part, LEGACY_ANALYSIS_PROMPT, RETRY_PROMPT],
+        contents=[image_part, ANALYSIS_PROMPT, RETRY_PROMPT],
+        config=config,
     )
 
     try:
@@ -574,3 +163,31 @@ async def _analyze_legacy(
         raise RuntimeError(
             f"Gemini returned invalid JSON after retry: {retry_response.text[:500]}"
         ) from exc
+
+
+# ── Public API ────────────────────────────────────────────────────────────
+
+
+async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
+    """Download an image from a URL and analyze it."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(image_url, follow_redirects=True, timeout=30)
+        resp.raise_for_status()
+
+    content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
+    return await _analyze(resp.content, content_type)
+
+
+async def analyze_shelf_image_from_bytes(
+    image_bytes: bytes, mime_type: str = "image/jpeg"
+) -> VisionAnalysisResult:
+    """Analyze a shelf image from raw bytes."""
+    return await _analyze(image_bytes, mime_type)
+
+
+async def analyze_shelf_image_from_base64(
+    b64_data: str, mime_type: str = "image/jpeg"
+) -> VisionAnalysisResult:
+    """Analyze a shelf image from a base64-encoded string."""
+    image_bytes = base64.b64decode(b64_data)
+    return await _analyze(image_bytes, mime_type)
