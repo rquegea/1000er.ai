@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import analyses, stores, users, visits, visit_photos
+from app.routers import analyses, stores, tenants, users, visits, visit_photos
 
 app = FastAPI(
     title="1000er.ai API",
@@ -22,6 +22,7 @@ app.add_middleware(
 
 app.include_router(analyses.router)
 app.include_router(stores.router)
+app.include_router(tenants.router)
 app.include_router(users.router)
 app.include_router(visits.router)
 app.include_router(visit_photos.router)

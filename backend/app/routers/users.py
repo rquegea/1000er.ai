@@ -85,7 +85,11 @@ async def create_user(
     admin: CurrentUser = Depends(require_admin),
 ):
     """Create a new user (admin only). Creates in Supabase Auth + users table."""
+    from app.utils.tenant_checks import check_tenant_active, check_user_limit
+
     sb = get_supabase_client()
+    check_tenant_active(admin.tenant_id)
+    check_user_limit(admin.tenant_id)
 
     # 1. Create in Supabase Auth
     try:

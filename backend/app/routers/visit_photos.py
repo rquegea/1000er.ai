@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Q
 
 from app.config import settings
 from app.deps import get_supabase_client, get_current_user, CurrentUser
-from app.services.vision import analyze_shelf_image_from_bytes
+from app.services.vision_router import analyze_shelf_image_from_bytes
 from app.models.api import (
     VisitPhotoOut,
     VisitPhotoListOut,

@@ -34,7 +34,11 @@ async def create_store(
     admin: CurrentUser = Depends(require_admin),
 ):
     """Create a new store (admin only)."""
+    from app.utils.tenant_checks import check_tenant_active, check_store_limit
+
     sb = get_supabase_client()
+    check_tenant_active(admin.tenant_id)
+    check_store_limit(admin.tenant_id)
 
     payload = {"tenant_id": admin.tenant_id, "name": body.name}
     for field in (

@@ -11,7 +11,12 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
 
     # --- Vision Pipeline ---
+    vision_pipeline: str = "v1"  # "v1" | "v3"
     gemini_temperature: float = 0.2
+    gemini_count_model: str = "gemini-2.5-flash"
+    gemini_classify_model: str = "gemini-2.5-flash"
+    gemini_count_temperature: float = 0.1
+    gemini_classify_temperature: float = 0.2
 
     @property
     def cors_origins(self) -> list[str]:

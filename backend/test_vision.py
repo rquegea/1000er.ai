@@ -1,28 +1,51 @@
-"""Quick smoke test for the Gemini vision analysis service."""
+"""Smoke test for the vision analysis pipeline (V1 or V3).
 
+Usage:
+    # Test V1 with default URL image
+    python test_vision.py
+
+    # Test V3 with default URL image
+    python test_vision.py --pipeline v3
+
+    # Test V3 with a local image file
+    python test_vision.py --pipeline v3 --image /path/to/shelf_photo.jpg
+
+    # Test V3 with a URL
+    python test_vision.py --pipeline v3 --url https://example.com/shelf.jpg
+"""
+
+import argparse
 import asyncio
 import json
+import mimetypes
 import sys
 import os
 
 # Ensure app is importable
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app.services.vision import analyze_shelf_image_from_url
-
 # Supermarket packaged goods shelf with price labels (Pexels)
-TEST_IMAGE_URL = "https://images.pexels.com/photos/2733918/pexels-photo-2733918.jpeg?w=1280"
+DEFAULT_IMAGE_URL = "https://images.pexels.com/photos/2733918/pexels-photo-2733918.jpeg?w=1280"
 
 
-async def main():
-    print(f"Image: {TEST_IMAGE_URL}")
-    print("Sending to Gemini 2.5 Flash...\n")
+def _get_analyze_fn(pipeline: str):
+    if pipeline == "v3":
+        from app.services.vision_v3 import (
+            analyze_shelf_image_from_bytes,
+            analyze_shelf_image_from_url,
+        )
+    else:
+        from app.services.vision import (
+            analyze_shelf_image_from_bytes,
+            analyze_shelf_image_from_url,
+        )
+    return analyze_shelf_image_from_bytes, analyze_shelf_image_from_url
 
-    result = await analyze_shelf_image_from_url(TEST_IMAGE_URL)
 
+def _print_result(result, pipeline: str):
     # Full JSON output
     print("=" * 70)
-    print("FULL JSON RESPONSE")
+    print(f"FULL JSON RESPONSE (pipeline={pipeline})")
     print("=" * 70)
     print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False))
 
@@ -30,6 +53,7 @@ async def main():
     print(f"\n{'=' * 70}")
     print("SUMMARY")
     print("=" * 70)
+    print(f"  Pipeline:   {pipeline.upper()}")
     print(f"  Products:   {result.summary.total_products}")
     print(f"  Facings:    {result.summary.total_facings}")
     print(f"  OOS:        {result.summary.oos_count}")
@@ -83,6 +107,54 @@ async def main():
     print(f"\n{'=' * 70}")
     print("TEST PASSED")
     print("=" * 70)
+
+
+async def main():
+    parser = argparse.ArgumentParser(description="Test vision pipeline")
+    parser.add_argument(
+        "--pipeline", choices=["v1", "v3"], default="v1",
+        help="Pipeline to use (default: v1)",
+    )
+    parser.add_argument(
+        "--image", type=str, default=None,
+        help="Path to a local image file to analyze",
+    )
+    parser.add_argument(
+        "--url", type=str, default=None,
+        help="URL of an image to analyze",
+    )
+    args = parser.parse_args()
+
+    analyze_from_bytes, analyze_from_url = _get_analyze_fn(args.pipeline)
+
+    print(f"Pipeline: {args.pipeline.upper()}")
+
+    if args.image:
+        # Local file
+        image_path = os.path.abspath(args.image)
+        if not os.path.exists(image_path):
+            print(f"ERROR: File not found: {image_path}")
+            sys.exit(1)
+
+        mime_type, _ = mimetypes.guess_type(image_path)
+        if not mime_type or not mime_type.startswith("image/"):
+            mime_type = "image/jpeg"
+
+        print(f"Image: {image_path} ({mime_type})")
+        print("Sending to Gemini...\n")
+
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+
+        result = await analyze_from_bytes(image_bytes, mime_type)
+    else:
+        # URL (default or custom)
+        image_url = args.url or DEFAULT_IMAGE_URL
+        print(f"Image: {image_url}")
+        print("Sending to Gemini...\n")
+        result = await analyze_from_url(image_url)
+
+    _print_result(result, args.pipeline)
 
 
 if __name__ == "__main__":
