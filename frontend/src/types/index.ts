@@ -32,6 +32,7 @@ export interface Analysis {
   shelf_upload_id: string;
   status: string;
   created_at: string;
+  image_url?: string | null;
   summary?: AnalysisSummary | null;
   products?: DetectedProduct[];
 }
@@ -201,6 +202,40 @@ export interface VisitPhoto {
   uploaded_by: string;
   notes: string | null;
   created_at: string;
+}
+
+// ── Analytics ─────────────────────────────────────────────
+
+export interface AnalyticsStoreData {
+  id: string;
+  name: string;
+  chain: string | null;
+  lat: number | null;
+  lng: number | null;
+  total_facings: number;
+  oos_count: number;
+  oos_rate: number;
+  brand_share: number;
+  last_visit: string | null;
+}
+
+export interface AnalyticsTrendPoint {
+  date: string;
+  analyses_count: number;
+  total_facings: number;
+  oos_rate: number;
+  brand_share: number;
+}
+
+export interface AnalyticsSummary {
+  total_analyses: number;
+  total_products: number;
+  total_facings: number;
+  total_oos: number;
+  avg_confidence: number | null;
+  stores: AnalyticsStoreData[];
+  trend: AnalyticsTrendPoint[];
+  chains: string[];
 }
 
 export interface VisitPhotoListResponse {

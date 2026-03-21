@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { getAnalysis } from "@/lib/api";
+import { getAnalysis, exportAnalysisCsv, retryAnalysis } from "@/lib/api";
 import type { Analysis } from "@/types";
 import Spinner from "@/components/Spinner";
 import KpiCard from "@/components/KpiCard";
@@ -16,6 +16,7 @@ export default function AnalysisDetailPage({
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     getAnalysis(id)
@@ -23,6 +24,19 @@ export default function AnalysisDetailPage({
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    setError(null);
+    try {
+      const result = await retryAnalysis(id);
+      setAnalysis(result);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al reintentar");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -71,13 +85,54 @@ export default function AnalysisDetailPage({
             &middot; {analysis.id.slice(0, 8)}
           </p>
         </div>
-        <Link
-          href="/analysis"
-          className="inline-flex shrink-0 rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"
-        >
-          Nuevo análisis
-        </Link>
+        <div className="flex shrink-0 gap-3">
+          <button
+            onClick={() => exportAnalysisCsv(id)}
+            className="inline-flex rounded-full border border-[#d2d2d7] px-5 py-2.5 text-[13px] font-medium text-[#1d1d1f] transition-all duration-300 hover:bg-[#f5f5f7] active:scale-[0.98]"
+          >
+            Exportar CSV
+          </button>
+          <Link
+            href="/analysis"
+            className="inline-flex rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"
+          >
+            Nuevo análisis
+          </Link>
+        </div>
       </div>
+
+      {/* Failed state */}
+      {analysis.status === "failed" && (
+        <div className="mt-8 rounded-2xl border border-[#ff3b30]/20 bg-[#ff3b30]/5 p-6 text-center">
+          <p className="text-[15px] font-medium text-[#ff3b30]">
+            El análisis ha fallado
+          </p>
+          <p className="mt-1 text-[13px] text-[#86868b]">
+            Puedes reintentar el análisis con la imagen original
+          </p>
+          {error && (
+            <p className="mt-2 text-[13px] text-[#ff3b30]">{error}</p>
+          )}
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="mt-4 inline-flex rounded-full bg-[#ff3b30] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[#e0342b] active:scale-[0.98] disabled:opacity-50"
+          >
+            {retrying ? "Reintentando..." : "Reintentar análisis"}
+          </button>
+        </div>
+      )}
+
+      {/* Shelf image */}
+      {analysis.image_url && (
+        <div className="mt-8 overflow-hidden rounded-2xl border border-[#e5e5ea]">
+          <img
+            src={analysis.image_url}
+            alt="Imagen del lineal"
+            className="w-full object-contain"
+          />
+        </div>
+      )}
 
       {/* KPIs */}
       {summary && (

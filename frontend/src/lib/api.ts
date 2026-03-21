@@ -2,6 +2,7 @@ import type {
   AnalysisUploadResponse,
   Analysis,
   AnalysisListResponse,
+  AnalyticsSummary,
   User,
   UserListResponse,
   UserCreatePayload,
@@ -20,6 +21,7 @@ import type {
   PhotoCategory,
 } from "@/types";
 import { createBrowserClient } from "@/lib/supabase";
+import { compressImage } from "@/lib/imageUtils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -45,8 +47,9 @@ async function authFetch(
 export async function uploadAndAnalyze(
   file: File
 ): Promise<AnalysisUploadResponse> {
+  const compressed = await compressImage(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", compressed);
 
   const res = await authFetch(`${API_URL}/api/v1/analyses/upload`, {
     method: "POST",
@@ -84,6 +87,68 @@ export async function listAnalyses(
   }
 
   return res.json();
+}
+
+export async function getAnalyticsSummary(params?: {
+  days?: number;
+  chain?: string;
+  store_id?: string;
+}): Promise<AnalyticsSummary> {
+  const searchParams = new URLSearchParams();
+  if (params?.days) searchParams.set("days", String(params.days));
+  if (params?.chain) searchParams.set("chain", params.chain);
+  if (params?.store_id) searchParams.set("store_id", params.store_id);
+  const qs = searchParams.toString();
+  const res = await authFetch(
+    `${API_URL}/api/v1/analytics/summary${qs ? `?${qs}` : ""}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch analytics (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function retryAnalysis(id: string): Promise<Analysis> {
+  const res = await authFetch(`${API_URL}/api/v1/analyses/${id}/retry`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Retry failed" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function exportAnalysisCsv(id: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/analyses/${id}/export`);
+  if (!res.ok) {
+    throw new Error(`Failed to export analysis (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `analisis_${id.slice(0, 8)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function exportVisitCsv(visitId: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}/export`);
+  if (!res.ok) {
+    throw new Error(`Failed to export visit (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `visita_${visitId.slice(0, 8)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Users ─────────────────────────────────────────────────
@@ -302,8 +367,9 @@ export async function uploadVisitPhoto(
   category: PhotoCategory,
   notes?: string
 ): Promise<VisitPhoto> {
+  const compressed = await compressImage(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", compressed);
   formData.append("category", category);
   if (notes) formData.append("notes", notes);
 
@@ -344,6 +410,20 @@ export async function deleteVisitPhoto(
     const err = await res.json().catch(() => ({ detail: "Failed to delete photo" }));
     throw new Error(err.detail || `Error ${res.status}`);
   }
+}
+
+export async function consolidateVisitAnalyses(
+  visitId: string
+): Promise<Analysis> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/consolidate`,
+    { method: "POST" }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Consolidation failed" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function getVisitSummary(visitId: string): Promise<VisitSummary> {

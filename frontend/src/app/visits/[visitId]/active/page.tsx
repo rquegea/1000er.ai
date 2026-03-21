@@ -12,6 +12,7 @@ import {
   deleteVisitPhoto,
   getVisitSummary,
   updateVisit,
+  consolidateVisitAnalyses,
 } from "@/lib/api";
 import type {
   Visit,
@@ -81,6 +82,8 @@ export default function ActiveVisitPage() {
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [visitNotes, setVisitNotes] = useState("");
+
+  const [consolidating, setConsolidating] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRefs = useRef<Record<PhotoCategory, HTMLInputElement | null>>({
@@ -230,6 +233,18 @@ export default function ActiveVisitPage() {
     },
     [visitId]
   );
+
+  const handleConsolidate = useCallback(async () => {
+    setConsolidating(true);
+    setError(null);
+    try {
+      const result = await consolidateVisitAnalyses(visitId);
+      router.push(`/analysis/${result.id}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al consolidar");
+      setConsolidating(false);
+    }
+  }, [visitId, router]);
 
   // ── Derived ────────────────────────────────────────────
 
@@ -775,7 +790,23 @@ export default function ActiveVisitPage() {
           )}
 
           {/* Actions */}
-          <div className="pt-2">
+          <div className="space-y-3 pt-2">
+            {summary && summary.analyses_count >= 2 && (
+              <button
+                onClick={handleConsolidate}
+                disabled={consolidating}
+                className="w-full rounded-full bg-[#007aff] px-8 py-4 text-[15px] font-medium text-white transition-all duration-300 hover:bg-[#0066cc] hover:shadow-lg active:scale-[0.98] disabled:opacity-50"
+              >
+                {consolidating ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Consolidando...
+                  </span>
+                ) : (
+                  `Consolidar ${summary.analyses_count} análisis`
+                )}
+              </button>
+            )}
             <button
               onClick={() => router.push("/calendar")}
               className="w-full rounded-full bg-[#1d1d1f] px-8 py-4 text-[15px] font-medium text-white transition-all duration-300 hover:bg-[#000] hover:shadow-lg active:scale-[0.98]"

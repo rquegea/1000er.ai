@@ -1,98 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { getAnalyticsSummary } from "@/lib/api";
+import type { AnalyticsSummary } from "@/types";
 import KpiCard from "@/components/KpiCard";
 import TrendChart from "@/components/analytics/TrendChart";
 import BrandSharePie from "@/components/analytics/BrandSharePie";
 import StoreMap from "@/components/analytics/StoreMap";
 import StoreRankingTable from "@/components/analytics/StoreRankingTable";
-
-/* ── Mock data ──────────────────────────────────────────────── */
-
-const mockStores = [
-  {
-    id: "1",
-    name: "Mercadona Sanchinarro",
-    chain: "Mercadona",
-    lat: 40.4978,
-    lng: -3.6606,
-    brandShare: 24,
-    oosRate: 3,
-    lastVisit: "2026-02-27",
-  },
-  {
-    id: "2",
-    name: "Carrefour Arturo Soria",
-    chain: "Carrefour",
-    lat: 40.4521,
-    lng: -3.6401,
-    brandShare: 18,
-    oosRate: 7,
-    lastVisit: "2026-02-25",
-  },
-  {
-    id: "3",
-    name: "Mercadona Pintor Gris",
-    chain: "Mercadona",
-    lat: 40.4123,
-    lng: -3.7034,
-    brandShare: 8,
-    oosRate: 12,
-    lastVisit: "2026-02-20",
-  },
-  {
-    id: "4",
-    name: "Dia Castellana",
-    chain: "Dia",
-    lat: 40.4312,
-    lng: -3.6892,
-    brandShare: 22,
-    oosRate: 2,
-    lastVisit: "2026-02-28",
-  },
-  {
-    id: "5",
-    name: "Carrefour Express Goya",
-    chain: "Carrefour",
-    lat: 40.4247,
-    lng: -3.6729,
-    brandShare: 15,
-    oosRate: 4,
-    lastVisit: "2026-02-26",
-  },
-  {
-    id: "6",
-    name: "Mercadona Bravo Murillo",
-    chain: "Mercadona",
-    lat: 40.4456,
-    lng: -3.7045,
-    brandShare: 28,
-    oosRate: 1,
-    lastVisit: "2026-02-28",
-  },
-  {
-    id: "7",
-    name: "Alcampo La Vaguada",
-    chain: "Alcampo",
-    lat: 40.4798,
-    lng: -3.7105,
-    brandShare: 11,
-    oosRate: 6,
-    lastVisit: "2026-02-22",
-  },
-];
-
-const mockTrendData = Array.from({ length: 30 }, (_, i) => {
-  const d = new Date("2026-02-01");
-  d.setDate(d.getDate() + i);
-  return {
-    date: d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }),
-    brandShare: 18 + Math.sin(i / 4) * 4 + Math.random() * 2,
-    oosRate: 5 + Math.cos(i / 3) * 3 + Math.random() * 1.5,
-  };
-});
-
-const chains = ["Todas", ...Array.from(new Set(mockStores.map((s) => s.chain)))];
+import Spinner from "@/components/Spinner";
 
 /* ── Tabs ───────────────────────────────────────────────────── */
 
@@ -108,22 +24,111 @@ const filterTabs: { key: FilterTab; label: string }[] = [
 /* ── Page ───────────────────────────────────────────────────── */
 
 export default function AnalyticsPage() {
+  const [data, setData] = useState<AnalyticsSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [selectedChain, setSelectedChain] = useState<string>("Todas");
+  const [days] = useState(30);
 
-  const filteredStores =
-    activeTab === "chain" && selectedChain !== "Todas"
-      ? mockStores.filter((s) => s.chain === selectedChain)
-      : mockStores;
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const params: { days: number; chain?: string } = { days };
+    if (activeTab === "chain" && selectedChain !== "Todas") {
+      params.chain = selectedChain;
+    }
+    getAnalyticsSummary(params)
+      .then(setData)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [days, activeTab, selectedChain]);
 
-  const avgBrandShare =
-    filteredStores.reduce((acc, s) => acc + s.brandShare, 0) /
-    filteredStores.length;
-  const avgOosRate =
-    filteredStores.reduce((acc, s) => acc + s.oosRate, 0) /
-    filteredStores.length;
-  const totalVisits = filteredStores.length;
-  const activeStores = filteredStores.length;
+  const chains = useMemo(
+    () => ["Todas", ...(data?.chains || [])],
+    [data?.chains]
+  );
+
+  const filteredStores = useMemo(() => {
+    if (!data) return [];
+    if (activeTab === "chain" && selectedChain !== "Todas") {
+      return data.stores.filter((s) => s.chain === selectedChain);
+    }
+    return data.stores;
+  }, [data, activeTab, selectedChain]);
+
+  // Map store data to component props
+  const mapStores = useMemo(
+    () =>
+      filteredStores
+        .filter((s) => s.lat != null && s.lng != null)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          chain: s.chain || "",
+          lat: s.lat!,
+          lng: s.lng!,
+          brandShare: s.brand_share,
+          oosRate: s.oos_rate,
+        })),
+    [filteredStores]
+  );
+
+  const rankingStores = useMemo(
+    () =>
+      filteredStores.map((s) => ({
+        id: s.id,
+        name: s.name,
+        chain: s.chain || "",
+        brandShare: s.brand_share,
+        oosRate: s.oos_rate,
+        lastVisit: s.last_visit || "",
+      })),
+    [filteredStores]
+  );
+
+  const trendData = useMemo(
+    () =>
+      (data?.trend || []).map((t) => ({
+        date: new Date(t.date).toLocaleDateString("es-ES", {
+          day: "2-digit",
+          month: "2-digit",
+        }),
+        brandShare: t.brand_share,
+        oosRate: t.oos_rate,
+      })),
+    [data?.trend]
+  );
+
+  // Compute KPIs
+  const avgOosRate = useMemo(() => {
+    if (!data || data.total_products === 0) return 0;
+    return (data.total_oos / data.total_products) * 100;
+  }, [data]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="text-[15px] text-[#ff3b30]">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  const isEmpty = !data || data.total_analyses === 0;
 
   return (
     <div className="mx-auto max-w-5xl px-6 pt-8 pb-20">
@@ -136,7 +141,7 @@ export default function AnalyticsPage() {
           Panel de rendimiento
         </h1>
         <p className="mt-1 text-[13px] text-[#86868b]">
-          Marzo 2026
+          Últimos {days} días
         </p>
       </div>
 
@@ -179,49 +184,64 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="mt-10 grid grid-cols-2 gap-x-12 gap-y-8 sm:grid-cols-4">
-        <KpiCard
-          label="Brand Share"
-          value={`${avgBrandShare.toFixed(1)}%`}
-        />
-        <KpiCard
-          label="OOS Rate"
-          value={`${avgOosRate.toFixed(1)}%`}
-          accent={avgOosRate > 5}
-        />
-        <KpiCard label="Visitas (mes)" value={totalVisits} />
-        <KpiCard label="Tiendas activas" value={activeStores} />
-      </div>
-
-      <div className="mt-12 h-px bg-[#e5e5ea]" />
-
-      {/* Trend chart + Brand share pie */}
-      <div className="mt-12 grid gap-12 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <TrendChart data={mockTrendData} dateRange="Ultimos 30 dias" />
+      {isEmpty ? (
+        <div className="mt-16 text-center">
+          <p className="text-[15px] text-[#86868b]">
+            No hay datos de análisis en los últimos {days} días
+          </p>
+          <p className="mt-2 text-[13px] text-[#86868b]">
+            Sube fotos de lineales para ver estadísticas aquí
+          </p>
         </div>
-        <div>
-          <BrandSharePie
-            ownShare={avgBrandShare}
-            competitorShare={100 - avgBrandShare}
-          />
-        </div>
-      </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="mt-10 grid grid-cols-2 gap-x-12 gap-y-8 sm:grid-cols-4">
+            <KpiCard label="Análisis" value={data!.total_analyses} />
+            <KpiCard label="Productos" value={data!.total_products} />
+            <KpiCard label="Facings" value={data!.total_facings} />
+            <KpiCard
+              label="OOS Rate"
+              value={`${avgOosRate.toFixed(1)}%`}
+              accent={avgOosRate > 5}
+            />
+          </div>
 
-      <div className="mt-12 h-px bg-[#e5e5ea]" />
+          <div className="mt-12 h-px bg-[#e5e5ea]" />
 
-      {/* Map */}
-      <div className="mt-12">
-        <StoreMap stores={filteredStores} />
-      </div>
+          {/* Trend chart + Brand share pie */}
+          {trendData.length > 0 && (
+            <>
+              <div className="mt-12 grid gap-12 lg:grid-cols-3">
+                <div className="lg:col-span-2">
+                  <TrendChart data={trendData} dateRange={`Últimos ${days} días`} />
+                </div>
+                <div>
+                  <BrandSharePie ownShare={0} competitorShare={100} />
+                </div>
+              </div>
+              <div className="mt-12 h-px bg-[#e5e5ea]" />
+            </>
+          )}
 
-      <div className="mt-12 h-px bg-[#e5e5ea]" />
+          {/* Map */}
+          {mapStores.length > 0 && (
+            <>
+              <div className="mt-12">
+                <StoreMap stores={mapStores} />
+              </div>
+              <div className="mt-12 h-px bg-[#e5e5ea]" />
+            </>
+          )}
 
-      {/* Ranking table */}
-      <div className="mt-12">
-        <StoreRankingTable stores={filteredStores} />
-      </div>
+          {/* Ranking table */}
+          {rankingStores.length > 0 && (
+            <div className="mt-12">
+              <StoreRankingTable stores={rankingStores} />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

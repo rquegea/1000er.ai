@@ -1,10 +1,15 @@
+import csv
+import io
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.deps import get_supabase_client, get_current_user, CurrentUser
 from app.services.vision_router import analyze_shelf_image_from_bytes
+from app.services.consolidation import consolidate_analyses
 from app.models.api import (
+    AnalysisDetailOut,
     VisitPhotoOut,
     VisitPhotoListOut,
     VisitSummaryOut,
@@ -326,4 +331,189 @@ async def get_visit_summary(
         oos_count=oos_count,
         avg_confidence=round(avg_confidence, 2) if avg_confidence is not None else None,
         oos_products=oos_products,
+    )
+
+
+# ── Consolidate analyses ──────────────────────────────────
+
+
+@router.post("/{visit_id}/consolidate", response_model=AnalysisDetailOut)
+async def consolidate_visit_analyses(
+    visit_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Consolidate all shelf analyses from a visit into a single unified analysis."""
+    sb = get_supabase_client()
+    visit = _verify_visit_ownership(sb, visit_id, user.tenant_id)
+
+    # Get all shelf photos with completed analyses
+    photos_rows = (
+        sb.table("visit_photos")
+        .select("analysis_id")
+        .eq("visit_id", visit_id)
+        .eq("tenant_id", user.tenant_id)
+        .eq("category", "shelf")
+        .execute()
+    )
+
+    analysis_ids = [p["analysis_id"] for p in photos_rows.data if p.get("analysis_id")]
+
+    if len(analysis_ids) < 2:
+        raise HTTPException(status_code=400, detail="Se necesitan al menos 2 análisis completados para consolidar")
+
+    # Check that analyses are completed
+    completed = (
+        sb.table("analyses")
+        .select("id")
+        .in_("id", analysis_ids)
+        .eq("tenant_id", user.tenant_id)
+        .eq("status", "completed")
+        .execute()
+    )
+    completed_ids = [a["id"] for a in completed.data]
+
+    if len(completed_ids) < 2:
+        raise HTTPException(status_code=400, detail="Se necesitan al menos 2 análisis completados para consolidar")
+
+    # Fetch products for each analysis
+    analyses_data = []
+    for aid in completed_ids:
+        prods = (
+            sb.table("detected_products")
+            .select("product_name, brand, facings, price, position_x, position_y, is_oos, confidence")
+            .eq("analysis_id", aid)
+            .eq("tenant_id", user.tenant_id)
+            .execute()
+        )
+        analyses_data.append({
+            "analysis_id": aid,
+            "products": prods.data,
+        })
+
+    # Run consolidation via Gemini
+    result = await consolidate_analyses(analyses_data)
+
+    # Create a new consolidated analysis record
+    # Use the first shelf_upload_id as reference
+    first_analysis = (
+        sb.table("analyses")
+        .select("shelf_upload_id")
+        .eq("id", completed_ids[0])
+        .execute()
+    )
+    shelf_upload_id = first_analysis.data[0]["shelf_upload_id"] if first_analysis.data else completed_ids[0]
+
+    analysis_row = (
+        sb.table("analyses")
+        .insert({
+            "tenant_id": user.tenant_id,
+            "shelf_upload_id": shelf_upload_id,
+            "status": "completed",
+            "is_consolidated": True,
+            "raw_response": result.model_dump(),
+        })
+        .execute()
+    )
+    new_analysis = analysis_row.data[0]
+    new_analysis_id = new_analysis["id"]
+
+    # Insert consolidated products
+    products_to_insert = [
+        {
+            "analysis_id": new_analysis_id,
+            "tenant_id": user.tenant_id,
+            "product_name": p.product_name,
+            "brand": p.brand,
+            "facings": p.facings,
+            "price": float(p.price) if p.price is not None else None,
+            "position_x": p.position_x,
+            "position_y": p.position_y,
+            "is_oos": p.is_oos,
+            "confidence": p.confidence,
+        }
+        for p in result.products
+    ]
+
+    inserted_products = []
+    if products_to_insert:
+        prod_rows = sb.table("detected_products").insert(products_to_insert).execute()
+        inserted_products = prod_rows.data
+
+    return AnalysisDetailOut(
+        id=new_analysis_id,
+        tenant_id=user.tenant_id,
+        shelf_upload_id=shelf_upload_id,
+        status="completed",
+        created_at=new_analysis["created_at"],
+        summary=result.summary,
+        products=[
+            DetectedProductOut(
+                id=row["id"],
+                product_name=row["product_name"],
+                brand=row["brand"],
+                facings=row["facings"],
+                price=float(row["price"]) if row["price"] is not None else None,
+                position_x=row["position_x"],
+                position_y=row["position_y"],
+                is_oos=row["is_oos"],
+                confidence=row["confidence"],
+            )
+            for row in inserted_products
+        ],
+    )
+
+
+# ── Visit CSV export ──────────────────────────────────────
+
+
+@router.get("/{visit_id}/export")
+async def export_visit_csv(
+    visit_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Export all analysis results for a visit as CSV."""
+    sb = get_supabase_client()
+    _verify_visit_ownership(sb, visit_id, user.tenant_id)
+
+    photos_rows = (
+        sb.table("visit_photos")
+        .select("analysis_id")
+        .eq("visit_id", visit_id)
+        .eq("tenant_id", user.tenant_id)
+        .execute()
+    )
+
+    analysis_ids = [p["analysis_id"] for p in photos_rows.data if p.get("analysis_id")]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Analisis ID", "Producto", "Marca", "Facings", "Precio", "Pos X", "Pos Y", "OOS", "Confianza"])
+
+    if analysis_ids:
+        prods = (
+            sb.table("detected_products")
+            .select("*")
+            .in_("analysis_id", analysis_ids)
+            .eq("tenant_id", user.tenant_id)
+            .execute()
+        )
+        for p in prods.data:
+            writer.writerow([
+                p.get("analysis_id", "")[:8],
+                p["product_name"],
+                p.get("brand") or "",
+                p.get("facings", 0),
+                p["price"] if p.get("price") is not None else "",
+                p.get("position_x", ""),
+                p.get("position_y", ""),
+                "Si" if p.get("is_oos") else "No",
+                p.get("confidence", ""),
+            ])
+
+    buf.seek(0)
+    short_id = visit_id[:8]
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="visita_{short_id}.csv"'},
     )

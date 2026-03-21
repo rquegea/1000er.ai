@@ -144,6 +144,7 @@ class AnalysisDetailOut(BaseModel):
     shelf_upload_id: str
     status: str
     created_at: str
+    image_url: str | None = None
     summary: AnalysisSummary | None = None
     products: list[DetectedProductOut] = []
 

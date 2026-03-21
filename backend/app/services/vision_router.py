@@ -1,10 +1,13 @@
-"""Vision pipeline router — selects V1 or V3 based on config."""
+"""Vision pipeline router — selects V1, V3 or V4 based on config."""
 
 from app.config import settings
 from app.models.vision import VisionAnalysisResult
 
 
 def _get_pipeline():
+    if settings.vision_pipeline == "v4":
+        from app.services import vision_v4
+        return vision_v4
     if settings.vision_pipeline == "v3":
         from app.services import vision_v3
         return vision_v3

@@ -59,6 +59,7 @@ export default function HomePage() {
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,8 +75,8 @@ export default function HomePage() {
         setVisits(visitsRes.data);
         setAnalyses(analysesRes.data);
         setStores(storesRes.data);
-      } catch {
-        // If not authed, redirect to login
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : "Error cargando datos");
       } finally {
         setLoading(false);
       }
@@ -141,6 +142,20 @@ export default function HomePage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="text-[15px] text-[#ff3b30]">{loadError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-full bg-[#1d1d1f] px-6 py-2.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[#333336] active:scale-[0.97]"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
