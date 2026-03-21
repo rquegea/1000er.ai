@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getAnalysis, exportAnalysisCsv, retryAnalysis } from "@/lib/api";
 import type { Analysis } from "@/types";
 import Spinner from "@/components/Spinner";
@@ -13,6 +14,7 @@ export default function AnalysisDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +153,47 @@ export default function AnalysisDetailPage({
         </div>
       )}
 
+      {/* Share of Shelf */}
+      {(() => {
+        const ownFacings = products.filter((p) => p.is_own === true).reduce((s, p) => s + p.facings, 0);
+        const compFacings = products.filter((p) => p.is_own === false).reduce((s, p) => s + p.facings, 0);
+        const unkFacings = products.filter((p) => p.is_own === null || p.is_own === undefined).reduce((s, p) => s + p.facings, 0);
+        const totalF = ownFacings + compFacings + unkFacings;
+        if (totalF === 0 || (ownFacings === 0 && compFacings === 0)) return null;
+        const ownPct = totalF > 0 ? Math.round((ownFacings / totalF) * 100) : 0;
+        return (
+          <div className="mt-8 rounded-2xl bg-[#f5f5f7] p-5">
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[#86868b]">
+              Share of Shelf
+            </p>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="h-3 overflow-hidden rounded-full bg-[#e5e5ea]">
+                  <div
+                    className="h-full rounded-full bg-[#34c759] transition-all"
+                    style={{ width: `${ownPct}%` }}
+                  />
+                </div>
+              </div>
+              <span className="text-[20px] font-bold text-[#1d1d1f]">{ownPct}%</span>
+            </div>
+            <div className="mt-2 flex gap-4 text-[12px] text-[#86868b]">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-[#34c759]" /> Nuestros: {ownFacings}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-[#86868b]" /> Competencia: {compFacings}
+              </span>
+              {unkFacings > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#ff9f0a]" /> Sin catalogar: {unkFacings}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Divider */}
       <div className="mt-12 h-px bg-[#e5e5ea]" />
 
@@ -178,7 +221,43 @@ export default function AnalysisDetailPage({
                   className="border-t border-[#f5f5f7] transition-colors duration-150 hover:bg-[#fafafa]"
                 >
                   <td className="py-3.5 pr-6 text-[14px] font-medium text-[#1d1d1f]">
-                    {p.product_name}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          p.is_own === true
+                            ? "bg-[#34c759]"
+                            : p.is_own === false
+                            ? "bg-[#86868b]"
+                            : "bg-[#ff9f0a]"
+                        }`}
+                        title={
+                          p.is_own === true
+                            ? "Nuestro"
+                            : p.is_own === false
+                            ? "Competencia"
+                            : "Sin catalogar"
+                        }
+                      />
+                      {p.product_name}
+                      {p.catalog_product_id === null && (
+                        <button
+                          onClick={() => {
+                            const params = new URLSearchParams({
+                              add: "1",
+                              name: p.product_name,
+                              brand: p.brand || "",
+                            });
+                            router.push(`/catalog?${params.toString()}`);
+                          }}
+                          className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[#007aff] transition-colors hover:bg-[#007aff]/10"
+                          title="Añadir al catálogo"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M6 2V10M2 6H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      )}
+                    </span>
                   </td>
                   <td className="py-3.5 pr-6 text-[14px] text-[#86868b]">
                     {p.brand || "—"}

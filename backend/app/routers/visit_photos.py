@@ -1,5 +1,7 @@
+import asyncio
 import csv
 import io
+import logging
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -17,6 +19,8 @@ from app.models.api import (
     DetectedProductOut,
     OosProductOut,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/visits", tags=["visit-photos"])
 
@@ -40,6 +44,7 @@ def _row_to_photo(row: dict) -> VisitPhotoOut:
         analysis_id=row.get("analysis_id"),
         uploaded_by=row["uploaded_by"],
         notes=row.get("notes"),
+        analysis_status=row.get("analysis_status"),
         created_at=row["created_at"],
     )
 
@@ -98,8 +103,9 @@ async def upload_visit_photo(
 
     image_url = f"{settings.supabase_url}/storage/v1/object/{BUCKET_NAME}/{storage_path}"
 
-    # --- Run AI analysis for shelf photos ---
+    # --- For shelf photos, create records and launch async analysis ---
     analysis_id = None
+    analysis_status = None
     if category == "shelf":
         store_id = visit["store_id"]
 
@@ -116,68 +122,133 @@ async def upload_visit_photo(
         )
         shelf_upload = upload_row.data[0]
 
-        # Create analysis record
+        # Create analysis record with pending status
         analysis_row = (
             sb.table("analyses")
             .insert({
                 "tenant_id": tenant_id,
                 "shelf_upload_id": shelf_upload["id"],
-                "status": "processing",
+                "status": "pending",
             })
             .execute()
         )
         analysis_id = analysis_row.data[0]["id"]
+        analysis_status = "pending"
 
-        try:
-            result = await analyze_shelf_image_from_bytes(image_bytes, content_type)
+    # --- Insert visit_photos record (returns immediately) ---
+    photo_insert = {
+        "tenant_id": tenant_id,
+        "visit_id": visit_id,
+        "category": category,
+        "image_url": image_url,
+        "analysis_id": analysis_id,
+        "uploaded_by": user.user_id,
+        "notes": notes,
+    }
+    if analysis_status:
+        photo_insert["analysis_status"] = analysis_status
 
-            products_to_insert = [
-                {
-                    "analysis_id": analysis_id,
-                    "tenant_id": tenant_id,
-                    "product_name": p.product_name,
-                    "brand": p.brand,
-                    "facings": p.facings,
-                    "price": float(p.price) if p.price is not None else None,
-                    "position_x": p.position_x,
-                    "position_y": p.position_y,
-                    "is_oos": p.is_oos,
-                    "confidence": p.confidence,
-                }
-                for p in result.products
-            ]
+    photo_row = sb.table("visit_photos").insert(photo_insert).execute()
+    photo_id = photo_row.data[0]["id"]
 
-            if products_to_insert:
-                sb.table("detected_products").insert(products_to_insert).execute()
-
-            sb.table("analyses").update({
-                "status": "completed",
-                "raw_response": result.model_dump(),
-            }).eq("id", analysis_id).execute()
-
-        except Exception as exc:
-            sb.table("analyses").update({
-                "status": "failed",
-                "raw_response": {"error": str(exc)},
-            }).eq("id", analysis_id).execute()
-            # Don't fail the whole upload — photo is saved, analysis just failed
-
-    # --- Insert visit_photos record ---
-    photo_row = (
-        sb.table("visit_photos")
-        .insert({
-            "tenant_id": tenant_id,
-            "visit_id": visit_id,
-            "category": category,
-            "image_url": image_url,
-            "analysis_id": analysis_id,
-            "uploaded_by": user.user_id,
-            "notes": notes,
-        })
-        .execute()
-    )
+    # --- Launch background analysis for shelf photos ---
+    if category == "shelf" and analysis_id:
+        asyncio.create_task(
+            _analyze_in_background(
+                image_bytes=image_bytes,
+                content_type=content_type,
+                analysis_id=analysis_id,
+                photo_id=photo_id,
+                tenant_id=tenant_id,
+            )
+        )
 
     return _row_to_photo(photo_row.data[0])
+
+
+async def _analyze_in_background(
+    image_bytes: bytes,
+    content_type: str,
+    analysis_id: str,
+    photo_id: str,
+    tenant_id: str,
+) -> None:
+    """Run vision analysis in background and update DB records."""
+    sb = get_supabase_client()
+    try:
+        # Mark as analyzing
+        sb.table("analyses").update({"status": "processing"}).eq("id", analysis_id).execute()
+        sb.table("visit_photos").update({"analysis_status": "analyzing"}).eq("id", photo_id).execute()
+
+        result = await analyze_shelf_image_from_bytes(image_bytes, content_type)
+
+        products_to_insert = [
+            {
+                "analysis_id": analysis_id,
+                "tenant_id": tenant_id,
+                "product_name": p.product_name,
+                "brand": p.brand,
+                "facings": p.facings,
+                "price": float(p.price) if p.price is not None else None,
+                "position_x": p.position_x,
+                "position_y": p.position_y,
+                "is_oos": p.is_oos,
+                "confidence": p.confidence,
+            }
+            for p in result.products
+        ]
+
+        # Catalog matching
+        try:
+            from app.services.catalog_matcher import match_detected_products
+            products_to_insert = await match_detected_products(products_to_insert, tenant_id)
+        except Exception as match_err:
+            logger.warning("Catalog matching failed, continuing without: %s", match_err)
+
+        if products_to_insert:
+            sb.table("detected_products").insert(products_to_insert).execute()
+
+        sb.table("analyses").update({
+            "status": "completed",
+            "raw_response": result.model_dump(),
+        }).eq("id", analysis_id).execute()
+
+        sb.table("visit_photos").update({"analysis_status": "completed"}).eq("id", photo_id).execute()
+
+    except Exception as exc:
+        logger.error("Background analysis failed for %s: %s", analysis_id, exc)
+        sb.table("analyses").update({
+            "status": "failed",
+            "raw_response": {"error": str(exc)},
+        }).eq("id", analysis_id).execute()
+        sb.table("visit_photos").update({"analysis_status": "failed"}).eq("id", photo_id).execute()
+
+
+# ── Photo analysis status ────────────────────────────────
+
+
+@router.get("/{visit_id}/photos/{photo_id}/status")
+async def get_photo_analysis_status(
+    visit_id: str,
+    photo_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get the analysis status of a specific photo."""
+    sb = get_supabase_client()
+    row = (
+        sb.table("visit_photos")
+        .select("analysis_status, analysis_id")
+        .eq("id", photo_id)
+        .eq("visit_id", visit_id)
+        .eq("tenant_id", user.tenant_id)
+        .execute()
+    )
+    if not row.data:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {
+        "analysis_status": row.data[0].get("analysis_status"),
+        "analysis_id": row.data[0].get("analysis_id"),
+    }
 
 
 # ── List photos ───────────────────────────────────────────
@@ -457,6 +528,8 @@ async def consolidate_visit_analyses(
                 position_y=row["position_y"],
                 is_oos=row["is_oos"],
                 confidence=row["confidence"],
+                catalog_product_id=row.get("catalog_product_id"),
+                is_own=row.get("is_own"),
             )
             for row in inserted_products
         ],

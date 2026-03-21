@@ -136,6 +136,8 @@ class DetectedProductOut(BaseModel):
     position_y: float | None
     is_oos: bool
     confidence: float | None
+    catalog_product_id: str | None = None
+    is_own: bool | None = None
 
 
 class AnalysisDetailOut(BaseModel):
@@ -197,6 +199,7 @@ class VisitPhotoOut(BaseModel):
     analysis_id: str | None = None
     uploaded_by: str
     notes: str | None = None
+    analysis_status: str | None = None
     created_at: str
 
 
@@ -222,3 +225,44 @@ class VisitSummaryOut(BaseModel):
     oos_count: int
     avg_confidence: float | None = None
     oos_products: list[OosProductOut] = []
+
+
+# ── Catalog ───────────────────────────────────────────────
+
+
+class CatalogProductCreate(BaseModel):
+    name: str
+    brand: str
+    category: str | None = None
+    is_own: bool = False
+    ean: str | None = None
+    aliases: list[str] = []
+
+
+class CatalogProductUpdate(BaseModel):
+    name: str | None = None
+    brand: str | None = None
+    category: str | None = None
+    is_own: bool | None = None
+    ean: str | None = None
+    aliases: list[str] | None = None
+    active: bool | None = None
+
+
+class CatalogProductOut(BaseModel):
+    id: str
+    name: str
+    brand: str | None
+    category: str | None
+    is_own: bool
+    ean: str | None
+    aliases: list[str]
+    active: bool
+    created_at: str
+
+
+class CatalogProductListOut(BaseModel):
+    data: list[CatalogProductOut]
+    total: int
+    limit: int
+    offset: int

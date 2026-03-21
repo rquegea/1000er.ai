@@ -8,6 +8,8 @@ export interface DetectedProduct {
   position_y: number | null;
   is_oos: boolean;
   confidence: number | null;
+  catalog_product_id: string | null;
+  is_own: boolean | null;
 }
 
 export interface AnalysisSummary {
@@ -201,6 +203,7 @@ export interface VisitPhoto {
   analysis_id: string | null;
   uploaded_by: string;
   notes: string | null;
+  analysis_status: "pending" | "analyzing" | "completed" | "failed" | null;
   created_at: string;
 }
 
@@ -217,6 +220,7 @@ export interface AnalyticsStoreData {
   oos_rate: number;
   brand_share: number;
   last_visit: string | null;
+  share_of_shelf: ShareOfShelf | null;
 }
 
 export interface AnalyticsTrendPoint {
@@ -225,6 +229,13 @@ export interface AnalyticsTrendPoint {
   total_facings: number;
   oos_rate: number;
   brand_share: number;
+}
+
+export interface ShareOfShelf {
+  own_facings: number;
+  competitor_facings: number;
+  unknown_facings: number;
+  own_share_pct: number;
 }
 
 export interface AnalyticsSummary {
@@ -236,6 +247,7 @@ export interface AnalyticsSummary {
   stores: AnalyticsStoreData[];
   trend: AnalyticsTrendPoint[];
   chains: string[];
+  share_of_shelf: ShareOfShelf | null;
 }
 
 export interface VisitPhotoListResponse {
@@ -260,4 +272,50 @@ export interface VisitSummary {
   oos_count: number;
   avg_confidence: number | null;
   oos_products: OosProduct[];
+}
+
+// ── Catalog ──────────────────────────────────────────────
+
+export interface CatalogProduct {
+  id: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  is_own: boolean;
+  ean: string | null;
+  aliases: string[];
+  active: boolean;
+  created_at: string;
+}
+
+export interface CatalogProductListResponse {
+  data: CatalogProduct[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CatalogProductCreatePayload {
+  name: string;
+  brand: string;
+  category?: string;
+  is_own?: boolean;
+  ean?: string;
+  aliases?: string[];
+}
+
+export interface CatalogProductUpdatePayload {
+  name?: string;
+  brand?: string;
+  category?: string;
+  is_own?: boolean;
+  ean?: string;
+  aliases?: string[];
+  active?: boolean;
+}
+
+export interface CatalogSuggestion {
+  product_name: string;
+  brand: string;
+  times_detected: number;
 }

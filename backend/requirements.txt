@@ -17,3 +17,4 @@ pytest-asyncio
 Pillow
 aiohttp
 numpy
+rapidfuzz

@@ -12,6 +12,7 @@ import {
   BarChart3,
   Store,
   Users,
+  Package,
   Settings,
   LogOut,
   Menu,
@@ -31,6 +32,7 @@ const analysisNav = [
 
 const managementNav = [
   { href: "/settings/stores", label: "Tiendas", icon: Store },
+  { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/settings/team", label: "Equipo", icon: Users },
 ];
 

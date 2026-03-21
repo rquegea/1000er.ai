@@ -8,6 +8,13 @@ from app.deps import get_supabase_client, get_current_user, CurrentUser
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
+class ShareOfShelf(BaseModel):
+    own_facings: int = 0
+    competitor_facings: int = 0
+    unknown_facings: int = 0
+    own_share_pct: float = 0.0
+
+
 class AnalyticsStoreData(BaseModel):
     id: str
     name: str
@@ -19,6 +26,7 @@ class AnalyticsStoreData(BaseModel):
     oos_rate: float = 0.0
     brand_share: float = 0.0
     last_visit: str | None = None
+    share_of_shelf: ShareOfShelf | None = None
 
 
 class AnalyticsTrendPoint(BaseModel):
@@ -38,6 +46,7 @@ class AnalyticsSummary(BaseModel):
     stores: list[AnalyticsStoreData] = []
     trend: list[AnalyticsTrendPoint] = []
     chains: list[str] = []
+    share_of_shelf: ShareOfShelf | None = None
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
@@ -80,7 +89,7 @@ async def get_analytics_summary(
         batch = analysis_ids[i:i+100]
         prods = (
             sb.table("detected_products")
-            .select("analysis_id, product_name, brand, facings, is_oos, confidence")
+            .select("analysis_id, product_name, brand, facings, is_oos, confidence, is_own")
             .in_("analysis_id", batch)
             .eq("tenant_id", tenant_id)
             .execute()
@@ -132,10 +141,18 @@ async def get_analytics_summary(
     total_oos = 0
     confidences: list[float] = []
 
+    # Share of shelf tracking (global)
+    own_facings_total = 0
+    competitor_facings_total = 0
+    unknown_facings_total = 0
+
     # Per-store aggregation
     store_facings: dict[str, int] = {}
     store_oos: dict[str, int] = {}
     store_products: dict[str, int] = {}
+    store_own_facings: dict[str, int] = {}
+    store_comp_facings: dict[str, int] = {}
+    store_unk_facings: dict[str, int] = {}
 
     # Per-date aggregation
     date_data: dict[str, dict] = {}
@@ -153,11 +170,26 @@ async def get_analytics_summary(
         if p.get("confidence") is not None:
             confidences.append(p["confidence"])
 
+        # Share of shelf
+        p_is_own = p.get("is_own")
+        if p_is_own is True:
+            own_facings_total += facings
+        elif p_is_own is False:
+            competitor_facings_total += facings
+        else:
+            unknown_facings_total += facings
+
         sid = analysis_store.get(p["analysis_id"])
         if sid:
             store_facings[sid] = store_facings.get(sid, 0) + facings
             store_oos[sid] = store_oos.get(sid, 0) + (1 if is_oos else 0)
             store_products[sid] = store_products.get(sid, 0) + 1
+            if p_is_own is True:
+                store_own_facings[sid] = store_own_facings.get(sid, 0) + facings
+            elif p_is_own is False:
+                store_comp_facings[sid] = store_comp_facings.get(sid, 0) + facings
+            else:
+                store_unk_facings[sid] = store_unk_facings.get(sid, 0) + facings
 
     # Build per-date trend
     for a in analyses:
@@ -222,6 +254,17 @@ async def get_analytics_summary(
         s_products = store_products.get(sid, 0)
         oos_rate = (s_oos / s_products * 100) if s_products > 0 else 0
 
+        s_own = store_own_facings.get(sid, 0)
+        s_comp = store_comp_facings.get(sid, 0)
+        s_unk = store_unk_facings.get(sid, 0)
+        s_total_f = s_own + s_comp + s_unk
+        store_sos = ShareOfShelf(
+            own_facings=s_own,
+            competitor_facings=s_comp,
+            unknown_facings=s_unk,
+            own_share_pct=round(s_own / s_total_f * 100, 1) if s_total_f > 0 else 0.0,
+        ) if s_total_f > 0 else None
+
         stores_data.append(AnalyticsStoreData(
             id=sid,
             name=store["name"],
@@ -231,13 +274,23 @@ async def get_analytics_summary(
             total_facings=s_facings,
             oos_count=s_oos,
             oos_rate=round(oos_rate, 1),
-            brand_share=0,
+            brand_share=round(s_own / s_total_f * 100, 1) if s_total_f > 0 else 0.0,
             last_visit=store_last_visit.get(sid),
+            share_of_shelf=store_sos,
         ))
 
     chains = sorted(set(s.get("chain") for s in stores_rows.data if s.get("chain")))
 
     avg_conf = (sum(confidences) / len(confidences)) if confidences else None
+
+    # Global share of shelf
+    total_sos_facings = own_facings_total + competitor_facings_total + unknown_facings_total
+    global_sos = ShareOfShelf(
+        own_facings=own_facings_total,
+        competitor_facings=competitor_facings_total,
+        unknown_facings=unknown_facings_total,
+        own_share_pct=round(own_facings_total / total_sos_facings * 100, 1) if total_sos_facings > 0 else 0.0,
+    ) if total_sos_facings > 0 else None
 
     return AnalyticsSummary(
         total_analyses=len(filtered_analysis_ids),
@@ -248,4 +301,5 @@ async def get_analytics_summary(
         stores=stores_data,
         trend=trend,
         chains=chains,
+        share_of_shelf=global_sos,
     )

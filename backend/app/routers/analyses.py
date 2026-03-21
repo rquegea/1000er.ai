@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -7,6 +8,8 @@ from fastapi.responses import StreamingResponse
 from app.config import settings
 from app.deps import get_supabase_client, get_current_user, CurrentUser
 from app.services.vision_router import analyze_shelf_image_from_bytes
+
+logger = logging.getLogger(__name__)
 from app.models.api import (
     AnalysisUploadOut,
     AnalysisDetailOut,
@@ -20,6 +23,22 @@ router = APIRouter(prefix="/api/v1/analyses", tags=["analyses"])
 
 BUCKET_NAME = "shelf-images"
 SIGNED_URL_EXPIRY = 3600  # 1 hour
+
+
+def _row_to_detected_product(row: dict) -> DetectedProductOut:
+    return DetectedProductOut(
+        id=row["id"],
+        product_name=row["product_name"],
+        brand=row["brand"],
+        facings=row["facings"],
+        price=float(row["price"]) if row["price"] is not None else None,
+        position_x=row["position_x"],
+        position_y=row["position_y"],
+        is_oos=row["is_oos"],
+        confidence=row["confidence"],
+        catalog_product_id=row.get("catalog_product_id"),
+        is_own=row.get("is_own"),
+    )
 
 
 def _ensure_bucket(sb):
@@ -135,6 +154,13 @@ async def upload_and_analyze(
             for p in result.products
         ]
 
+        # --- 5b. Catalog matching ---
+        try:
+            from app.services.catalog_matcher import match_detected_products
+            products_to_insert = await match_detected_products(products_to_insert, tenant_id)
+        except Exception as match_err:
+            logger.warning("Catalog matching failed, continuing without: %s", match_err)
+
         inserted_products = []
         if products_to_insert:
             prod_rows = (
@@ -191,20 +217,7 @@ async def upload_and_analyze(
             created_at=analysis["created_at"],
             image_url=signed_image_url,
             summary=result.summary,
-            products=[
-                DetectedProductOut(
-                    id=row["id"],
-                    product_name=row["product_name"],
-                    brand=row["brand"],
-                    facings=row["facings"],
-                    price=float(row["price"]) if row["price"] is not None else None,
-                    position_x=row["position_x"],
-                    position_y=row["position_y"],
-                    is_oos=row["is_oos"],
-                    confidence=row["confidence"],
-                )
-                for row in inserted_products
-            ],
+            products=[_row_to_detected_product(row) for row in inserted_products],
         ),
     )
 
@@ -295,20 +308,7 @@ async def get_analysis(analysis_id: str, user: CurrentUser = Depends(get_current
         created_at=analysis["created_at"],
         image_url=image_url,
         summary=summary,
-        products=[
-            DetectedProductOut(
-                id=p["id"],
-                product_name=p["product_name"],
-                brand=p["brand"],
-                facings=p["facings"],
-                price=float(p["price"]) if p["price"] is not None else None,
-                position_x=p["position_x"],
-                position_y=p["position_y"],
-                is_oos=p["is_oos"],
-                confidence=p["confidence"],
-            )
-            for p in prod_rows.data
-        ],
+        products=[_row_to_detected_product(p) for p in prod_rows.data],
     )
 
 
@@ -384,6 +384,13 @@ async def retry_analysis(
             for p in result.products
         ]
 
+        # Catalog matching
+        try:
+            from app.services.catalog_matcher import match_detected_products
+            products_to_insert = await match_detected_products(products_to_insert, user.tenant_id)
+        except Exception as match_err:
+            logger.warning("Catalog matching failed on retry, continuing without: %s", match_err)
+
         inserted_products = []
         if products_to_insert:
             prod_rows = sb.table("detected_products").insert(products_to_insert).execute()
@@ -402,20 +409,7 @@ async def retry_analysis(
             created_at=analysis["created_at"],
             image_url=_get_signed_url(sb, image_url),
             summary=result.summary,
-            products=[
-                DetectedProductOut(
-                    id=row["id"],
-                    product_name=row["product_name"],
-                    brand=row["brand"],
-                    facings=row["facings"],
-                    price=float(row["price"]) if row["price"] is not None else None,
-                    position_x=row["position_x"],
-                    position_y=row["position_y"],
-                    is_oos=row["is_oos"],
-                    confidence=row["confidence"],
-                )
-                for row in inserted_products
-            ],
+            products=[_row_to_detected_product(row) for row in inserted_products],
         )
 
     except Exception as exc:

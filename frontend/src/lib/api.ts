@@ -19,6 +19,11 @@ import type {
   VisitPhotoListResponse,
   VisitSummary,
   PhotoCategory,
+  CatalogProduct,
+  CatalogProductListResponse,
+  CatalogProductCreatePayload,
+  CatalogProductUpdatePayload,
+  CatalogSuggestion,
 } from "@/types";
 import { createBrowserClient } from "@/lib/supabase";
 import { compressImage } from "@/lib/imageUtils";
@@ -432,6 +437,121 @@ export async function getVisitSummary(visitId: string): Promise<VisitSummary> {
   );
   if (!res.ok) {
     throw new Error(`Failed to fetch visit summary (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function getPhotoAnalysisStatus(
+  visitId: string,
+  photoId: string
+): Promise<{ analysis_status: string | null; analysis_id: string | null }> {
+  const res = await authFetch(
+    `${API_URL}/api/v1/visits/${visitId}/photos/${photoId}/status`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch photo status (${res.status})`);
+  }
+  return res.json();
+}
+
+// ── Catalog ──────────────────────────────────────────────
+
+export async function getCatalogSuggestions(): Promise<CatalogSuggestion[]> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/suggestions`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch suggestions (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function listCatalogProducts(params?: {
+  limit?: number;
+  offset?: number;
+  brand?: string;
+  category?: string;
+  is_own?: boolean;
+  q?: string;
+}): Promise<CatalogProductListResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  if (params?.brand) searchParams.set("brand", params.brand);
+  if (params?.category) searchParams.set("category", params.category);
+  if (params?.is_own !== undefined) searchParams.set("is_own", String(params.is_own));
+  if (params?.q) searchParams.set("q", params.q);
+  const qs = searchParams.toString();
+  const res = await authFetch(
+    `${API_URL}/api/v1/catalog/products${qs ? `?${qs}` : ""}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch catalog (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function createCatalogProduct(
+  payload: CatalogProductCreatePayload
+): Promise<CatalogProduct> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create product" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateCatalogProduct(
+  productId: string,
+  payload: CatalogProductUpdatePayload
+): Promise<CatalogProduct> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/products/${productId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update product" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteCatalogProduct(productId: string): Promise<void> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/products/${productId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to delete product" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+}
+
+export async function rematchCatalog(): Promise<{ matched: number; unmatched: number }> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/rematch`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Rematch failed" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function bulkCreateCatalogProducts(
+  products: CatalogProductCreatePayload[]
+): Promise<CatalogProduct[]> {
+  const res = await authFetch(`${API_URL}/api/v1/catalog/products/bulk`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(products),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Bulk create failed" }));
+    throw new Error(err.detail || `Error ${res.status}`);
   }
   return res.json();
 }

@@ -13,6 +13,7 @@ import {
   getVisitSummary,
   updateVisit,
   consolidateVisitAnalyses,
+  getPhotoAnalysisStatus,
 } from "@/lib/api";
 import type {
   Visit,
@@ -157,6 +158,43 @@ export default function ActiveVisitPage() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [visit?.status]);
+
+  // ── Poll for pending analysis statuses ─────────────────
+
+  useEffect(() => {
+    const pendingPhotos = photos.filter(
+      (p) =>
+        p.analysis_status === "pending" || p.analysis_status === "analyzing"
+    );
+    if (pendingPhotos.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const photo of pendingPhotos) {
+        try {
+          const status = await getPhotoAnalysisStatus(visitId, photo.id);
+          if (
+            status.analysis_status !== photo.analysis_status
+          ) {
+            setPhotos((prev) =>
+              prev.map((p) =>
+                p.id === photo.id
+                  ? {
+                      ...p,
+                      analysis_status: status.analysis_status as VisitPhoto["analysis_status"],
+                      analysis_id: status.analysis_id ?? p.analysis_id,
+                    }
+                  : p
+              )
+            );
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [photos, visitId]);
 
   // ── Actions ────────────────────────────────────────────
 
@@ -570,7 +608,26 @@ export default function ActiveVisitPage() {
                             alt=""
                             className="h-full w-full object-cover"
                           />
-                          {photo.analysis_id && (
+                          {/* Analysis status badge */}
+                          {(photo.analysis_status === "pending" || photo.analysis_status === "analyzing") && (
+                            <div className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#007aff]">
+                              <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-white border-t-transparent" />
+                            </div>
+                          )}
+                          {photo.analysis_status === "completed" && (
+                            <div className="absolute left-1 top-1 rounded-full bg-[#34c759] px-1.5 py-0.5 text-[8px] font-bold text-white">
+                              IA
+                            </div>
+                          )}
+                          {photo.analysis_status === "failed" && (
+                            <div className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#ff3b30]">
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                <path d="M5 1V6M5 8V8.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            </div>
+                          )}
+                          {/* Fallback: old photos without analysis_status but with analysis_id */}
+                          {!photo.analysis_status && photo.analysis_id && (
                             <div className="absolute left-1 top-1 rounded-full bg-[#34c759] px-1.5 py-0.5 text-[8px] font-bold text-white">
                               IA
                             </div>
