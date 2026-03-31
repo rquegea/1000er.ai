@@ -135,7 +135,7 @@ async def upload_and_analyze(
 
     # --- 4. Run vision analysis ---
     try:
-        result = await analyze_shelf_image_from_bytes(image_bytes, content_type)
+        result = await analyze_shelf_image_from_bytes(image_bytes, content_type, tenant_id=tenant_id)
 
         # --- 5. Insert detected_products ---
         products_to_insert = [
@@ -366,7 +366,7 @@ async def retry_analysis(
     sb.table("detected_products").delete().eq("analysis_id", analysis_id).eq("tenant_id", user.tenant_id).execute()
 
     try:
-        result = await analyze_shelf_image_from_bytes(image_bytes, content_type)
+        result = await analyze_shelf_image_from_bytes(image_bytes, content_type, tenant_id=user.tenant_id)
 
         products_to_insert = [
             {

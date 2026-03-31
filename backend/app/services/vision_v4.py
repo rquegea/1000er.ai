@@ -87,6 +87,17 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   ]
 }}
 
+PRODUCT NAME RULES — CRITICAL:
+- The product name is the MARKETING NAME on the front of the package, NOT weight, gramaje, nutritional claims, or barcodes.
+- IGNORE numbers like "83", "78", "65", "500g", "375g" — these are package weights, not product names.
+- IGNORE percentage claims like "23% protein", "0% sugar" — these are nutritional claims, not product names.
+- IGNORE price numbers from shelf labels — these go in the "price" field, not the product name.
+- Example: A box showing "Special K" with "83" and "65 calorias" → product_name should be "Special K Original", NOT "Special K 83".
+- Example: A box showing "HIGH PROTEIN 23%" → product_name should be "Special K High Protein", NOT "Special K High Protein 23%".
+- When you see a brand logo (e.g. large "K" for Kellogg's), use the actual product line name, not just the letter.
+
+{catalog_section}
+
 RULES:
 - The sum of all product facings MUST equal {n}. Do not add or remove facings.
 - Each detection index must appear in exactly one product's detection_indices.
@@ -496,10 +507,43 @@ async def _detect_facings(
 # ── Pass 2: Classification ───────────────────────────────────────────────
 
 
+def _build_catalog_section(catalog: list[dict] | None) -> str:
+    """Build the catalog prompt section from a list of product dicts."""
+    if not catalog:
+        return ""
+    lines = [f"- {p['name']} ({p.get('brand', 'Unknown')})" for p in catalog]
+    return (
+        "KNOWN PRODUCTS IN THIS STORE (use these names when you recognize a match):\n"
+        + "\n".join(lines)
+        + "\n\nWhen a detected product matches a known product, use the EXACT name and brand from this list.\n"
+        "Only create a new product name if nothing in the catalog matches what you see."
+    )
+
+
+def _fetch_catalog(tenant_id: str) -> list[dict] | None:
+    """Fetch active product catalog for a tenant from the database."""
+    from app.deps import get_supabase_client
+
+    try:
+        sb = get_supabase_client()
+        rows = (
+            sb.table("products")
+            .select("name, brand")
+            .eq("tenant_id", tenant_id)
+            .eq("active", True)
+            .execute()
+        )
+        return rows.data if rows.data else None
+    except Exception as exc:
+        logger.warning("Failed to fetch catalog for tenant %s: %s", tenant_id, exc)
+        return None
+
+
 async def _classify_products(
     client: genai.Client,
     image_part: types.Part,
     detections: list[Detection],
+    catalog: list[dict] | None = None,
 ) -> ClassificationResultV4:
     """Pass 2: Classify products given real bounding boxes."""
     detections_for_prompt = [
@@ -508,9 +552,12 @@ async def _classify_products(
     ]
     detections_json = json.dumps(detections_for_prompt, indent=2)
 
+    catalog_section = _build_catalog_section(catalog)
+
     prompt = CLASSIFY_PROMPT_TEMPLATE.format(
         n=len(detections),
         detections_json=detections_json,
+        catalog_section=catalog_section,
     )
 
     return _call_and_parse(
@@ -581,7 +628,7 @@ def _merge_results(
 
 
 async def _analyze(
-    image_bytes: bytes, mime_type: str
+    image_bytes: bytes, mime_type: str, tenant_id: str | None = None
 ) -> tuple[VisionAnalysisResult, list[dict]]:
     """Bbox detection → filter/dedup → classify → merge → validate.
 
@@ -589,6 +636,11 @@ async def _analyze(
     """
     client = _get_client()
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+    # Fetch catalog for tenant (if available)
+    catalog = _fetch_catalog(tenant_id) if tenant_id else None
+    if catalog:
+        logger.info("V4 Catalog: %d products loaded for tenant %s", len(catalog), tenant_id)
 
     # Pass 1: Detect bounding boxes (with automatic shelf splitting)
     logger.info("V4 Pass 1: Detecting bounding boxes...")
@@ -601,7 +653,7 @@ async def _analyze(
 
     # Pass 2: Classify products
     logger.info("V4 Pass 2: Classifying products...")
-    classification = await _classify_products(client, image_part, detections)
+    classification = await _classify_products(client, image_part, detections, catalog=catalog)
     logger.info(
         "V4 Pass 2 complete: %d products identified",
         len(classification.products),
@@ -632,29 +684,31 @@ async def _analyze(
 # ── Public API ────────────────────────────────────────────────────────────
 
 
-async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
+async def analyze_shelf_image_from_url(
+    image_url: str, tenant_id: str | None = None
+) -> VisionAnalysisResult:
     """Download an image from a URL and analyze it."""
     async with httpx.AsyncClient() as http_client:
         resp = await http_client.get(image_url, follow_redirects=True, timeout=30)
         resp.raise_for_status()
 
     content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
-    result, _ = await _analyze(resp.content, content_type)
+    result, _ = await _analyze(resp.content, content_type, tenant_id=tenant_id)
     return result
 
 
 async def analyze_shelf_image_from_bytes(
-    image_bytes: bytes, mime_type: str = "image/jpeg"
+    image_bytes: bytes, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from raw bytes."""
-    result, _ = await _analyze(image_bytes, mime_type)
+    result, _ = await _analyze(image_bytes, mime_type, tenant_id=tenant_id)
     return result
 
 
 async def analyze_shelf_image_from_base64(
-    b64_data: str, mime_type: str = "image/jpeg"
+    b64_data: str, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from a base64-encoded string."""
     image_bytes = base64.b64decode(b64_data)
-    result, _ = await _analyze(image_bytes, mime_type)
+    result, _ = await _analyze(image_bytes, mime_type, tenant_id=tenant_id)
     return result

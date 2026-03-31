@@ -168,7 +168,9 @@ async def _analyze(
 # ── Public API ────────────────────────────────────────────────────────────
 
 
-async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
+async def analyze_shelf_image_from_url(
+    image_url: str, tenant_id: str | None = None
+) -> VisionAnalysisResult:
     """Download an image from a URL and analyze it."""
     async with httpx.AsyncClient() as client:
         resp = await client.get(image_url, follow_redirects=True, timeout=30)
@@ -179,14 +181,14 @@ async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
 
 
 async def analyze_shelf_image_from_bytes(
-    image_bytes: bytes, mime_type: str = "image/jpeg"
+    image_bytes: bytes, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from raw bytes."""
     return await _analyze(image_bytes, mime_type)
 
 
 async def analyze_shelf_image_from_base64(
-    b64_data: str, mime_type: str = "image/jpeg"
+    b64_data: str, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from a base64-encoded string."""
     image_bytes = base64.b64decode(b64_data)

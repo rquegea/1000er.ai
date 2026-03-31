@@ -1,4 +1,4 @@
-"""Vision pipeline router — selects V1, V3 or V4 based on config."""
+"""Vision pipeline router — selects V1, V3, V4 or V5 based on config."""
 
 from app.config import settings
 from app.models.vision import VisionAnalysisResult
@@ -18,17 +18,19 @@ def _get_pipeline():
     return vision
 
 
-async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
-    return await _get_pipeline().analyze_shelf_image_from_url(image_url)
+async def analyze_shelf_image_from_url(
+    image_url: str, tenant_id: str | None = None
+) -> VisionAnalysisResult:
+    return await _get_pipeline().analyze_shelf_image_from_url(image_url, tenant_id=tenant_id)
 
 
 async def analyze_shelf_image_from_bytes(
-    image_bytes: bytes, mime_type: str = "image/jpeg"
+    image_bytes: bytes, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
-    return await _get_pipeline().analyze_shelf_image_from_bytes(image_bytes, mime_type)
+    return await _get_pipeline().analyze_shelf_image_from_bytes(image_bytes, mime_type, tenant_id=tenant_id)
 
 
 async def analyze_shelf_image_from_base64(
-    b64_data: str, mime_type: str = "image/jpeg"
+    b64_data: str, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
-    return await _get_pipeline().analyze_shelf_image_from_base64(b64_data, mime_type)
+    return await _get_pipeline().analyze_shelf_image_from_base64(b64_data, mime_type, tenant_id=tenant_id)

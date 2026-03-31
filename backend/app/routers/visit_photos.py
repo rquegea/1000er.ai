@@ -198,7 +198,7 @@ async def _analyze_in_background(
         sb.table("analyses").update({"status": "processing"}).eq("id", analysis_id).execute()
         sb.table("visit_photos").update({"analysis_status": "analyzing"}).eq("id", photo_id).execute()
 
-        result = await analyze_shelf_image_from_bytes(image_bytes, content_type)
+        result = await analyze_shelf_image_from_bytes(image_bytes, content_type, tenant_id=tenant_id)
 
         products_to_insert = [
             {

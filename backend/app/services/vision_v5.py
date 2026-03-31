@@ -42,6 +42,7 @@ from app.services.vision_v4 import (
     _call_gemini,
     _call_and_parse,
     _parse_json,
+    _fetch_catalog,
     CLASSIFY_PROMPT_TEMPLATE,
     RETRY_PROMPT,
 )
@@ -122,11 +123,16 @@ async def _detect_facings_yolo(
 
 
 async def _analyze(
-    image_bytes: bytes, mime_type: str
+    image_bytes: bytes, mime_type: str, tenant_id: str | None = None
 ) -> tuple[VisionAnalysisResult, list[dict]]:
     """YOLO detection → filter/dedup → Gemini classify → merge → validate."""
     client = _get_client()
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+    # Fetch catalog for tenant (if available)
+    catalog = _fetch_catalog(tenant_id) if tenant_id else None
+    if catalog:
+        logger.info("V5 Catalog: %d products loaded for tenant %s", len(catalog), tenant_id)
 
     # Pass 1: YOLO bounding boxes
     logger.info("V5 Pass 1: Detecting bounding boxes with YOLO...")
@@ -139,7 +145,7 @@ async def _analyze(
 
     # Pass 2: Gemini classification (exactly as V4)
     logger.info("V5 Pass 2: Classifying products with Gemini...")
-    classification = await _classify_products(client, image_part, detections)
+    classification = await _classify_products(client, image_part, detections, catalog=catalog)
     logger.info(
         "V5 Pass 2 complete: %d products identified",
         len(classification.products),
@@ -173,29 +179,31 @@ async def _analyze(
 # ── Public API ────────────────────────────────────────────────────────────
 
 
-async def analyze_shelf_image_from_url(image_url: str) -> VisionAnalysisResult:
+async def analyze_shelf_image_from_url(
+    image_url: str, tenant_id: str | None = None
+) -> VisionAnalysisResult:
     """Download an image from a URL and analyze it."""
     async with httpx.AsyncClient() as http_client:
         resp = await http_client.get(image_url, follow_redirects=True, timeout=30)
         resp.raise_for_status()
 
     content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
-    result, _ = await _analyze(resp.content, content_type)
+    result, _ = await _analyze(resp.content, content_type, tenant_id=tenant_id)
     return result
 
 
 async def analyze_shelf_image_from_bytes(
-    image_bytes: bytes, mime_type: str = "image/jpeg"
+    image_bytes: bytes, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from raw bytes."""
-    result, _ = await _analyze(image_bytes, mime_type)
+    result, _ = await _analyze(image_bytes, mime_type, tenant_id=tenant_id)
     return result
 
 
 async def analyze_shelf_image_from_base64(
-    b64_data: str, mime_type: str = "image/jpeg"
+    b64_data: str, mime_type: str = "image/jpeg", tenant_id: str | None = None
 ) -> VisionAnalysisResult:
     """Analyze a shelf image from a base64-encoded string."""
     image_bytes = base64.b64decode(b64_data)
-    result, _ = await _analyze(image_bytes, mime_type)
+    result, _ = await _analyze(image_bytes, mime_type, tenant_id=tenant_id)
     return result
