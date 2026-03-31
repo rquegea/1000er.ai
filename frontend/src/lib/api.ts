@@ -24,6 +24,11 @@ import type {
   CatalogProductCreatePayload,
   CatalogProductUpdatePayload,
   CatalogSuggestion,
+  Scan,
+  ScanDetail,
+  ScanListResponse,
+  ScanCreatePayload,
+  ScanPhoto,
 } from "@/types";
 import { createBrowserClient } from "@/lib/supabase";
 import { compressImage } from "@/lib/imageUtils";
@@ -552,6 +557,81 @@ export async function bulkCreateCatalogProducts(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Bulk create failed" }));
     throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Scans ────────────────────────────────────────────────
+
+export async function createScan(payload: ScanCreatePayload): Promise<Scan> {
+  const res = await authFetch(`${API_URL}/api/v1/scans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create scan" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function uploadScanPhoto(
+  scanId: string,
+  file: File,
+  photoIndex: number
+): Promise<ScanPhoto> {
+  const compressed = await compressImage(file);
+  const formData = new FormData();
+  formData.append("file", compressed);
+  formData.append("photo_index", String(photoIndex));
+
+  const res = await authFetch(`${API_URL}/api/v1/scans/${scanId}/photos`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to upload scan photo" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function processScan(
+  scanId: string
+): Promise<{ scan_id: string; status: string; message: string }> {
+  const res = await authFetch(`${API_URL}/api/v1/scans/${scanId}/process`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to process scan" }));
+    throw new Error(err.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getScan(scanId: string): Promise<ScanDetail> {
+  const res = await authFetch(`${API_URL}/api/v1/scans/${scanId}`);
+  if (!res.ok) {
+    throw new Error(`Scan not found (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function getScanPanorama(
+  scanId: string
+): Promise<{ panorama_url: string }> {
+  const res = await authFetch(`${API_URL}/api/v1/scans/${scanId}/panorama`);
+  if (!res.ok) {
+    throw new Error(`Panorama not available (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function listVisitScans(visitId: string): Promise<ScanListResponse> {
+  const res = await authFetch(`${API_URL}/api/v1/visits/${visitId}/scans`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch scans (${res.status})`);
   }
   return res.json();
 }

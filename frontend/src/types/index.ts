@@ -319,3 +319,46 @@ export interface CatalogSuggestion {
   brand: string;
   times_detected: number;
 }
+
+// ── Scans ───────────────────────────────────────────────
+
+export type ScanStatus = "uploading" | "stitching" | "analyzing" | "completed" | "failed";
+
+export interface Scan {
+  id: string;
+  tenant_id: string;
+  visit_id: string | null;
+  store_id: string;
+  status: ScanStatus;
+  photo_count: number;
+  panorama_url: string | null;
+  analysis_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScanPhoto {
+  id: string;
+  scan_id: string;
+  tenant_id: string;
+  photo_index: number;
+  image_url: string;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+}
+
+export interface ScanDetail extends Scan {
+  photos: ScanPhoto[];
+}
+
+export interface ScanListResponse {
+  data: Scan[];
+  total: number;
+}
+
+export interface ScanCreatePayload {
+  visit_id: string;
+  store_id: string;
+}

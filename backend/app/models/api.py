@@ -266,3 +266,45 @@ class CatalogProductListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Scans ─────────────────────────────────────────────────
+
+
+class ScanCreate(BaseModel):
+    visit_id: str
+    store_id: str
+
+
+class ScanPhotoOut(BaseModel):
+    id: str
+    scan_id: str
+    tenant_id: str
+    photo_index: int
+    image_url: str
+    width: int | None = None
+    height: int | None = None
+    created_at: str
+
+
+class ScanOut(BaseModel):
+    id: str
+    tenant_id: str
+    visit_id: str | None = None
+    store_id: str
+    status: str
+    photo_count: int
+    panorama_url: str | None = None
+    analysis_id: str | None = None
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+class ScanDetailOut(ScanOut):
+    photos: list[ScanPhotoOut] = []
+
+
+class ScanListOut(BaseModel):
+    data: list[ScanOut]
+    total: int
