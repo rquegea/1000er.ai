@@ -42,7 +42,15 @@ MAX_FACINGS_PER_LEVEL = 15
 COUNTING_PROMPT = """You are an expert shelf-facing counter. Your ONLY job is to count product facings at the FRONT EDGE of this supermarket shelf.
 
 CRITICAL DEFINITION:
-A "facing" is ONLY a product unit at the VERY FRONT EDGE of the shelf, closest to the customer. Products behind the front row are DEPTH/STOCK and must NOT be counted.
+A "facing" = ONE PHYSICAL PACKAGE/UNIT a customer could pick up. Count PACKAGES, never the contents inside.
+
+PACKAGING RULE — THIS IS THE #2 SOURCE OF ERRORS:
+Products come in many package types: boxes, bags, cans, cylinders, blister packs, jars.
+For BAGS and TRANSPARENT PACKAGING (very common with snacks, crackers, rice cakes, tortitas):
+- A bag of tortitas/galletas/chips = 1 facing, even if you can see 6-8 individual rounds/items INSIDE the bag through the packaging.
+- DO NOT count individual items visible inside a bag. The bag itself is the facing.
+- Round tortita bags (Bicentury, etc.): count the BAGS, not the circular products inside.
+- A transparent bag showing 10 crackers stacked = still 1 facing.
 
 DEPTH TEST — THIS IS THE #1 SOURCE OF ERRORS:
 If you see two or more identical products in a line going AWAY from the camera (one partially hidden behind another), that is DEPTH. Count ONLY the one at the very front. For example:
@@ -137,6 +145,14 @@ RULES:
 - Position: use the average (x, y) of the product's facings.
 - LANGUAGE: Write product names exactly as shown on packaging. Do NOT translate.
 - DUPLICATES: If two groups of facings are the same product but at different prices, list them as separate entries only if the packaging is visibly different. If it's the same product with different shelf price labels, merge them into one entry and use the most visible price.
+
+VARIANT DIFFERENTIATION — CRITICAL for similar brands:
+When a brand (e.g., Bicentury, Gullón Vitalday, Ecocesta) has multiple similar-looking SKUs:
+- Look for the specific product name/variant text on each package (e.g., "Maíz", "Avena", "Chocolate", "Arroz Quinoa").
+- Even if packaging shapes are identical, different variant text = different product = separate entries.
+- Do NOT merge all similar-looking packages from the same brand into one entry.
+- A group of identical packages = multiple facings of ONE product. Different package text = separate products.
+- When you cannot read the variant text clearly, use the dominant color or visible ingredient illustration to differentiate.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
 {{

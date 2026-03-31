@@ -18,3 +18,5 @@ Pillow
 aiohttp
 numpy
 rapidfuzz
+ultralytics>=8.0.0
+huggingface_hub>=0.20.0

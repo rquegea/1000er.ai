@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     gemini_classify_temperature: float = 0.2
     gemini_detection_temperature: float = 0.5  # Google recommended for bbox
 
+    # YOLO detection settings (V5)
+    yolo_confidence: float = 0.25
+    yolo_iou_threshold: float = 0.45
+    yolo_max_detections: int = 100
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]

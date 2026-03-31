@@ -24,6 +24,7 @@ from app.models.vision import (
     VisionAnalysisResult,
 )
 from app.services.validation import validate_analysis
+from app.services.shelf_splitter import split_image, adjust_boxes_to_global
 
 logger = logging.getLogger("vision_v4")
 
@@ -34,16 +35,22 @@ T = TypeVar("T", bound=BaseModel)
 DETECTION_PROMPT = """Detect the 2D bounding boxes of every individual product unit visible at the FRONT EDGE of this retail shelf.
 
 CRITICAL RULES:
-- Each bounding box = ONE product unit (one facing)
+- Each bounding box = ONE product PACKAGE/UNIT (one facing)
 - ONLY detect products at the VERY FRONT of the shelf, closest to the camera
 - Products BEHIND the front row (depth/stock) must NOT be detected
 - If you see identical products in a line going AWAY from the camera (one behind another), only box the FRONT one
 - Each box should tightly wrap ONE product package/unit
 - Include ALL products across ALL shelf levels
 
+PACKAGING TYPE RULE — very important for snack/cracker/tortita shelves:
+- A BAG of tortitas, crackers, galletas, chips = 1 facing. Box the ENTIRE BAG as one unit.
+- Do NOT box the individual rounds, discs or items visible INSIDE the bag through transparent packaging.
+- A transparent bag showing 8 tortita discs stacked = still 1 facing, 1 bounding box for the whole bag.
+- Round bags (Bicentury, etc.), tall bags (Gullón Vitalday, etc.), cylinders (Ecocesta, etc.) — each PACKAGE = 1 box.
+
 Output a JSON list where each entry contains:
 - "box_2d": bounding box as [y_min, x_min, y_max, x_max] in range [0, 1000]
-- "label": brief visual description of the product (e.g. "cereal box red packaging", "green snack bar")
+- "label": brief visual description of the product package (e.g. "blue tortita bag", "tall green vitalday bag", "red cracker box")
 
 IMPORTANT: Do NOT use "label" to identify the product name — just describe what you see visually. Product identification comes later."""
 
@@ -86,6 +93,7 @@ RULES:
 - Confidence: 0.9+ if name clearly readable, 0.7-0.9 if partially readable, 0.5-0.7 if guessing.
 - Position: use the average center of the product's detection boxes (normalize to 0.0-1.0 by dividing by 1000).
 - If two groups are the same product but at different prices, list as separate entries only if packaging is visibly different. Otherwise merge and use the most visible price.
+- VARIANT DIFFERENTIATION: When a brand (e.g. Bicentury, Gullón Vitalday, Ecocesta) has multiple similar-looking SKUs, look for the specific variant text on each package (e.g. "Maíz", "Avena", "Chocolate", "Arroz Quinoa"). Different variant text = different product = separate entries. Do NOT merge all similar packages from the same brand into one entry.
 
 You MUST respond with ONLY a raw JSON object. No markdown fences, no text before or after."""
 
@@ -201,6 +209,10 @@ def _box_area(box: list[int]) -> int:
     return (box[2] - box[0]) * (box[3] - box[1])
 
 
+def _box_height(box: list[int]) -> int:
+    return box[2] - box[0]
+
+
 def _iou(box1: list[int], box2: list[int]) -> float:
     """Intersection over Union for two boxes in [y_min, x_min, y_max, x_max]."""
     y_min = max(box1[0], box2[0])
@@ -219,29 +231,105 @@ def _iou(box1: list[int], box2: list[int]) -> float:
     return intersection / union if union > 0 else 0.0
 
 
+def _x_overlap_ratio(box1: list[int], box2: list[int]) -> float:
+    """Overlap in X as a fraction of the narrower box's width (0.0–1.0)."""
+    x_min = max(box1[1], box2[1])
+    x_max = min(box1[3], box2[3])
+    if x_min >= x_max:
+        return 0.0
+    overlap_width = x_max - x_min
+    min_width = min(box1[3] - box1[1], box2[3] - box2[1])
+    return overlap_width / min_width if min_width > 0 else 0.0
+
+
 def _deduplicate_depth(
-    detections: list[Detection], iou_threshold: float = 0.5
+    detections: list[Detection], iou_threshold: float = 0.35
 ) -> list[Detection]:
-    """Remove duplicate detections that likely represent depth (same product front-to-back)."""
+    """Remove detections that likely represent depth (product behind the front row).
+
+    Two strategies:
+    1. IoU > threshold  — catches heavily overlapping boxes.
+    2. Vertical proximity + horizontal overlap — catches front-to-back stacking
+       where boxes are in the same column but slightly offset in Y (low IoU).
+    """
     if not detections:
         return detections
 
-    # Sort by area descending (larger boxes first — they're usually the front product)
-    sorted_dets = sorted(
-        detections, key=lambda d: _box_area(d.box_2d), reverse=True
-    )
+    # Sort by area descending — larger box is assumed to be the front product
+    sorted_dets = sorted(detections, key=lambda d: _box_area(d.box_2d), reverse=True)
     keep: list[Detection] = []
 
     for det in sorted_dets:
+        det_area = _box_area(det.box_2d)
+        det_cy = (det.box_2d[0] + det.box_2d[2]) / 2
         is_duplicate = False
+
         for kept in keep:
+            # Strategy 1: IoU threshold (lowered to 0.35)
             if _iou(det.box_2d, kept.box_2d) > iou_threshold:
                 is_duplicate = True
                 break
+
+            # Strategy 2: Vertical proximity + horizontal overlap
+            x_overlap = _x_overlap_ratio(det.box_2d, kept.box_2d)
+            if x_overlap > 0.45:
+                kept_cy = (kept.box_2d[0] + kept.box_2d[2]) / 2
+                max_h = max(_box_height(det.box_2d), _box_height(kept.box_2d))
+                y_distance = abs(det_cy - kept_cy)
+                if y_distance < max_h * 1.2:
+                    kept_area = _box_area(kept.box_2d)
+                    area_ratio = det_area / kept_area if kept_area > 0 else 1.0
+                    if area_ratio < 0.85:
+                        is_duplicate = True
+                        break
+
         if not is_duplicate:
             keep.append(det)
 
     return keep
+
+
+def _group_by_shelf_level(
+    detections: list[Detection], y_tolerance: float = 80
+) -> list[list[Detection]]:
+    """Group detections into shelf levels by Y center proximity."""
+    if not detections:
+        return []
+    sorted_dets = sorted(detections, key=lambda d: (d.box_2d[0] + d.box_2d[2]) / 2)
+    levels: list[list[Detection]] = []
+    current_level: list[Detection] = [sorted_dets[0]]
+    current_y = (sorted_dets[0].box_2d[0] + sorted_dets[0].box_2d[2]) / 2
+
+    for det in sorted_dets[1:]:
+        det_y = (det.box_2d[0] + det.box_2d[2]) / 2
+        if abs(det_y - current_y) <= y_tolerance:
+            current_level.append(det)
+        else:
+            levels.append(current_level)
+            current_level = [det]
+            current_y = det_y
+
+    levels.append(current_level)
+    return levels
+
+
+def _cap_per_shelf_level(
+    detections: list[Detection], max_per_level: int = 12
+) -> list[Detection]:
+    """Safety net: if a shelf level has too many detections, keep only the largest."""
+    levels = _group_by_shelf_level(detections)
+    result: list[Detection] = []
+    for level in levels:
+        if len(level) <= max_per_level:
+            result.extend(level)
+        else:
+            level_sorted = sorted(level, key=lambda d: _box_area(d.box_2d), reverse=True)
+            result.extend(level_sorted[:max_per_level])
+            logger.warning(
+                "Shelf level cap: %d → %d detections (removed %d likely depth)",
+                len(level), max_per_level, len(level) - max_per_level,
+            )
+    return result
 
 
 def _filter_detections(detections: list[Detection]) -> list[Detection]:
@@ -282,7 +370,7 @@ def _filter_detections(detections: list[Detection]) -> list[Detection]:
 def _process_detections(
     raw_detections: list[Detection],
 ) -> list[Detection]:
-    """Filter invalid boxes and deduplicate depth overlaps."""
+    """Filter invalid boxes → depth dedup → per-level cap."""
     filtered = _filter_detections(raw_detections)
     logger.info(
         "V4 Detection: %d raw → %d after filtering",
@@ -292,12 +380,30 @@ def _process_detections(
 
     deduped = _deduplicate_depth(filtered)
     logger.info(
-        "V4 Detection: %d after filtering → %d after IoU dedup",
+        "V4 Detection: %d after filtering → %d after depth dedup",
         len(filtered),
         len(deduped),
     )
 
-    return deduped
+    capped = _cap_per_shelf_level(deduped)
+    logger.info(
+        "V4 Detection: %d after depth dedup → %d after shelf-level cap",
+        len(deduped),
+        len(capped),
+    )
+
+    return capped
+
+
+# ── Strip-level detection helpers ────────────────────────────────────────
+
+
+def _remove_overlap_duplicates(
+    detections: list[Detection], iou_threshold: float = 0.4
+) -> list[Detection]:
+    """After merging multi-strip detections, remove boxes that duplicate a detection
+    from the overlapping region of an adjacent strip."""
+    return _deduplicate_depth(detections, iou_threshold)
 
 
 # ── Pass 1: Bounding box detection ───────────────────────────────────────
@@ -325,10 +431,10 @@ _DETECTION_SCHEMA = {
 }
 
 
-async def _detect_facings(
+async def _detect_facings_single(
     client: genai.Client, image_part: types.Part
 ) -> list[Detection]:
-    """Pass 1: Use Gemini box_2d native detection to find every front-row facing."""
+    """Detect facings in a single image part (used per-strip)."""
     raw_text = _call_gemini(
         client,
         settings.gemini_count_model,
@@ -346,8 +452,45 @@ async def _detect_facings(
             f"Gemini detection returned invalid JSON: {raw_text[:500]}"
         ) from exc
 
-    detections = [Detection.model_validate(item) for item in raw_list]
-    return detections
+    return [Detection.model_validate(item) for item in raw_list]
+
+
+async def _detect_facings(
+    client: genai.Client, image_bytes: bytes, mime_type: str
+) -> list[Detection]:
+    """Pass 1: Split image into strips and detect facings per strip.
+
+    For small/landscape images a single pass is used. For tall portrait
+    images (typical shelf photos) each strip is analysed independently and
+    bounding boxes are adjusted back to global coordinates before merging.
+    """
+    strips = split_image(image_bytes, mime_type)
+
+    if len(strips) == 1:
+        # No split needed — run single pass on the full image
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+        return await _detect_facings_single(client, image_part)
+
+    logger.info("V4 shelf splitting: %d strips", len(strips))
+    all_detections: list[Detection] = []
+
+    for i, strip in enumerate(strips):
+        strip_part = types.Part.from_bytes(data=strip.image_bytes, mime_type=strip.mime_type)
+        strip_dets = await _detect_facings_single(client, strip_part)
+        logger.info("V4 Strip %d/%d: %d detections (y=%.2f–%.2f)",
+                    i + 1, len(strips), len(strip_dets), strip.y_start, strip.y_end)
+
+        # Adjust local bounding boxes → global image coordinates
+        adjusted = adjust_boxes_to_global([d.box_2d for d in strip_dets], strip)
+        for det, new_box in zip(strip_dets, adjusted):
+            det.box_2d = new_box
+        all_detections.extend(strip_dets)
+
+    # Remove duplicates introduced by strip overlap regions
+    merged = _remove_overlap_duplicates(all_detections)
+    logger.info("V4 Merged strips: %d total → %d after overlap dedup",
+                len(all_detections), len(merged))
+    return merged
 
 
 # ── Pass 2: Classification ───────────────────────────────────────────────
@@ -447,9 +590,9 @@ async def _analyze(
     client = _get_client()
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
-    # Pass 1: Detect bounding boxes
+    # Pass 1: Detect bounding boxes (with automatic shelf splitting)
     logger.info("V4 Pass 1: Detecting bounding boxes...")
-    raw_detections = await _detect_facings(client, image_part)
+    raw_detections = await _detect_facings(client, image_bytes, mime_type)
     logger.info("V4 Pass 1 complete: %d raw detections", len(raw_detections))
 
     # Post-process: filter and deduplicate
@@ -472,10 +615,15 @@ async def _analyze(
         logger.warning("V4 Validation warnings: %s", validation.warnings)
         result.reasoning += "\n\n[V4 Validation] " + "; ".join(validation.warnings)
 
-    # Prepare raw detections for storage (frontend visualization)
+    # Map product names back to individual detections via detection_indices
+    detection_labels: dict[int, str] = {}
+    for cp in classification.products:
+        for idx in cp.detection_indices:
+            detection_labels[idx] = cp.product_name
+
     raw_detections_data = [
-        {"box_2d": d.box_2d, "label": d.label}
-        for d in detections
+        {"box_2d": d.box_2d, "label": detection_labels.get(i, d.label)}
+        for i, d in enumerate(detections)
     ]
 
     return result, raw_detections_data

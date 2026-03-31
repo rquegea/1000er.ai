@@ -34,13 +34,31 @@ def _ensure_bucket(sb):
         sb.storage.create_bucket(BUCKET_NAME, options={"public": False})
 
 
-def _row_to_photo(row: dict) -> VisitPhotoOut:
+def _signed_url(sb, image_url: str) -> str:
+    """Return a 1-hour signed URL for a private-bucket image_url."""
+    try:
+        prefix = f"/storage/v1/object/{BUCKET_NAME}/"
+        # Handle both absolute and relative paths
+        if prefix in image_url:
+            storage_path = image_url.split(prefix, 1)[1]
+        else:
+            return image_url
+        result = sb.storage.from_(BUCKET_NAME).create_signed_url(storage_path, 3600)
+        return result.get("signedURL") or result.get("signed_url") or image_url
+    except Exception:
+        return image_url
+
+
+def _row_to_photo(row: dict, sb=None) -> VisitPhotoOut:
+    url = row["image_url"]
+    if sb is not None:
+        url = _signed_url(sb, url)
     return VisitPhotoOut(
         id=row["id"],
         tenant_id=row["tenant_id"],
         visit_id=row["visit_id"],
         category=row["category"],
-        image_url=row["image_url"],
+        image_url=url,
         analysis_id=row.get("analysis_id"),
         uploaded_by=row["uploaded_by"],
         notes=row.get("notes"),
@@ -163,7 +181,7 @@ async def upload_visit_photo(
             )
         )
 
-    return _row_to_photo(photo_row.data[0])
+    return _row_to_photo(photo_row.data[0], sb)
 
 
 async def _analyze_in_background(
@@ -278,7 +296,7 @@ async def list_visit_photos(
     total = rows.count if rows.count is not None else len(rows.data)
 
     return VisitPhotoListOut(
-        data=[_row_to_photo(r) for r in rows.data],
+        data=[_row_to_photo(r, sb) for r in rows.data],
         total=total,
     )
 

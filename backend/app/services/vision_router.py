@@ -5,6 +5,9 @@ from app.models.vision import VisionAnalysisResult
 
 
 def _get_pipeline():
+    if settings.vision_pipeline == "v5":
+        from app.services import vision_v5
+        return vision_v5
     if settings.vision_pipeline == "v4":
         from app.services import vision_v4
         return vision_v4
